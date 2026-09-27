@@ -183,8 +183,8 @@
     },
     {
       "path": "skills/analyze-stats/SKILL.md",
-      "size": 60456,
-      "sha256": "c541c8811b918bb5b5cb380297a52659b4bda88537841574dc1272a8f7918aa8"
+      "size": 28585,
+      "sha256": "bfe0edfcc24fe9c0b3454c5d0ecc1186ae7bf4f4c87656e9c99bb6384c45cbdd"
     },
     {
       "path": "skills/analyze-stats/references/analysis_guides/agreement_reliability.md",
@@ -268,8 +268,8 @@
     },
     {
       "path": "skills/analyze-stats/references/analysis_guides/survival.md",
-      "size": 7191,
-      "sha256": "6b7f220f2aa165fd16eda58b0b40ac743c122c03757bc00f61efc884b203f337"
+      "size": 7226,
+      "sha256": "eb21a46d9b0dbb480ef100763526a48a84c47a2d61cf971e69cdbd3fef4899b0"
     },
     {
       "path": "skills/analyze-stats/references/analysis_guides/test_selection.md",
@@ -277,9 +277,34 @@
       "sha256": "105476a719db4d728dece0c03e620c322597e1ce56afa8a685782075d2f5bad1"
     },
     {
+      "path": "skills/analyze-stats/references/analysis_guides/transfusion_hemovigilance.md",
+      "size": 10686,
+      "sha256": "68363ef15a2a756b591fe0bdc2a3ba8cadc4ec23ac0fd112ef590d47b1398cc9"
+    },
+    {
       "path": "skills/analyze-stats/references/analysis_run_workflow.md",
       "size": 7675,
       "sha256": "9b6c18cad4a5171ae17c70b87b1cca35c21500734889b04254e1141ab3f87c59"
+    },
+    {
+      "path": "skills/analyze-stats/references/analysis_specific/descriptive_diagnostic.md",
+      "size": 5520,
+      "sha256": "e20ebdcc18f2b97673c352de8af54052ba1f8d790b482efed8f1fb24431483a7"
+    },
+    {
+      "path": "skills/analyze-stats/references/analysis_specific/evidence_synthesis.md",
+      "size": 6151,
+      "sha256": "f28472e3ef6ee36821a5402f572ebbc9a0a9b5b22468ec51948c81ba41d49336"
+    },
+    {
+      "path": "skills/analyze-stats/references/analysis_specific/regression_causal.md",
+      "size": 17294,
+      "sha256": "9de98cbdef2320d2fefbe1e8169c399e140a1b521db5b407f2621fe7179a0832"
+    },
+    {
+      "path": "skills/analyze-stats/references/analysis_specific/time_to_event.md",
+      "size": 6734,
+      "sha256": "d8e761ddb45acc9c14ca567ea0ee6dbc090505f149146a573e349ffe007e4b2e"
     },
     {
       "path": "skills/analyze-stats/references/style/figure_style.mplstyle",
@@ -3973,8 +3998,8 @@
     },
     {
       "path": "skills/present-paper/SKILL.md",
-      "size": 54032,
-      "sha256": "768f1e4a044f3ca2a0861e82a6c787eb1bc7d7dd29840c182760cfd2ebdf45ac"
+      "size": 41823,
+      "sha256": "cc1b2899327f2d6d39dd98ab547db47f4187a59c8dbbfbfd64b9c1f995a9c882"
     },
     {
       "path": "skills/present-paper/references/ai_slide_tells.md",
@@ -4000,6 +4025,11 @@
       "path": "skills/present-paper/references/medical_presentation_templates.md",
       "size": 15007,
       "sha256": "d0f964af7523ec8bfef50ca627878f8c2cfe58159c2a827c5f7dfd43585cf9ee"
+    },
+    {
+      "path": "skills/present-paper/references/mode_a_build.md",
+      "size": 13862,
+      "sha256": "34f87a162aea4baa62b7de49dd0f74776384aecfd61e8dbbf7329fe50e6085f3"
     },
     {
       "path": "skills/present-paper/references/presentation_archetypes.md",

@@ -2,6 +2,26 @@
 
 ## [Unreleased]
 
+### Added
+
+- A transfusion-medicine and hemovigilance analysis guide for `/analyze-stats`
+  (`references/analysis_guides/transfusion_hemovigilance.md`). It covers naming the
+  denominator of a reaction rate (units issued vs transfused vs episodes vs patients),
+  exact Poisson intervals and zero-event upper bounds, surveillance-definition changes
+  as change points, immortal time and confounding by indication when transfusion is the
+  exposure, survivor bias in component-ratio analyses, donor-recipient
+  cross-classification in storage-age and donor-attribute studies, the healthy donor
+  effect, and screening-schedule-dependent alloimmunization incidence.
+
+### Changed
+
+- `/analyze-stats` SKILL.md drops from ~15,100 to ~7,100 estimated tokens: the
+  per-analysis-type rules moved unchanged into four files under
+  `references/analysis_specific/`, read after the Phase 2 plan fixes the analysis type.
+- `/present-paper` SKILL.md drops from ~13,500 to ~10,500 estimated tokens: the Mode A
+  python-pptx build internals moved unchanged to `references/mode_a_build.md`; the
+  diagram-edge and font-portability gates stay in SKILL.md.
+
 ## [5.27.0] - 2026-09-23
 
 ### Added

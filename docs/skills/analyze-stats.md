@@ -8,7 +8,7 @@
 
 ## When to use
 
-`analyze-stats` activates on requests such as: statistics, statistical analysis, analyze data, run stats, table 1, demographics table, ROC curve, agreement analysis, ICC, kappa, survival analysis, Kaplan-Meier, group comparison, logistic regression, linear regression, regression, propensity score, PSM, IPTW, SIPTW, overlap weighting, repeated measures, mixed model, GEE, longitudinal, survey weighted, KNHANES, NHANES, NHIS cohort, complex survey, wOR, weighted odds ratio, claims-based, ICD-10.
+`analyze-stats` activates on requests such as: statistics, statistical analysis, analyze data, run stats, table 1, demographics table, ROC curve, agreement analysis, ICC, kappa, survival analysis, Kaplan-Meier, group comparison, logistic regression, linear regression, regression, propensity score, PSM, IPTW, SIPTW, overlap weighting, repeated measures, mixed model, GEE, longitudinal, survey weighted, KNHANES, NHANES, NHIS cohort, complex survey, wOR, weighted odds ratio, claims-based, ICD-10, transfusion, hemovigilance, haemovigilance, transfusion reaction, blood product, massive transfusion, red cell storage, donor-recipient, alloimmunization, platelet refractoriness.
 
 ## Quality Card
 
@@ -38,8 +38,9 @@
 
 **References** (`skills/analyze-stats/references/`):
 
-- `analysis_guides/` (18 files)
+- `analysis_guides/` (19 files)
 - `analysis_run_workflow.md`
+- `analysis_specific/` (4 files)
 - `style/` (2 files)
 - `table-standards/` (17 files)
 - `templates/` (14 files)
