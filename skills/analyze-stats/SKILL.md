@@ -1,7 +1,7 @@
 ---
 name: analyze-stats
 description: Statistical analysis for medical research papers. Generates reproducible Python/R code with publication-ready tables and figures. Supports diagnostic accuracy, inter-rater agreement, meta-analysis, survival analysis, survey data, group comparisons, regression, propensity score, and repeated measures.
-triggers: statistics, statistical analysis, analyze data, run stats, table 1, demographics table, ROC curve, agreement analysis, ICC, kappa, survival analysis, Kaplan-Meier, group comparison, logistic regression, linear regression, regression, propensity score, PSM, IPTW, SIPTW, overlap weighting, repeated measures, mixed model, GEE, longitudinal, survey weighted, KNHANES, NHANES, NHIS cohort, complex survey, wOR, weighted odds ratio, claims-based, ICD-10
+triggers: statistics, statistical analysis, analyze data, run stats, table 1, demographics table, ROC curve, agreement analysis, ICC, kappa, survival analysis, Kaplan-Meier, group comparison, logistic regression, linear regression, regression, propensity score, PSM, IPTW, SIPTW, overlap weighting, repeated measures, mixed model, GEE, longitudinal, survey weighted, KNHANES, NHANES, NHIS cohort, complex survey, wOR, weighted odds ratio, claims-based, ICD-10, transfusion, hemovigilance, haemovigilance, transfusion reaction, blood product, massive transfusion, red cell storage, donor-recipient, alloimmunization, platelet refractoriness
 tools: Read, Write, Edit, Bash, Grep, Glob
 model: inherit
 ---
@@ -28,6 +28,7 @@ Before reading any data file, check whether it might contain Protected Health In
 
 - **Templates**: `${CLAUDE_SKILL_DIR}/references/templates/` -- reusable analysis scripts
 - **Analysis guides**: `${CLAUDE_SKILL_DIR}/references/analysis_guides/` -- on-demand methodology references
+- **Per-type operating rules**: `${CLAUDE_SKILL_DIR}/references/analysis_specific/` -- read after Phase 2 fixes the analysis type (routing table in § Analysis-Specific Guidelines)
 - **Table standards**: `${CLAUDE_SKILL_DIR}/references/table-standards/` -- journal-specific table formatting
   - `table-standards.md` -- universal rules, AMA rules, footnote system, mistakes checklist
   - `journal-profiles/` -- YAML profiles per journal (radiology, jama, nejm, lancet, eur_rad, ajr)
@@ -108,6 +109,7 @@ Present the plan and **wait for user approval** before executing.
 For **Logistic Regression**, **Linear Regression**, **Propensity Score**, **Survey-Weighted**, and **Repeated Measures**:
 load the corresponding guide from `${CLAUDE_SKILL_DIR}/references/analysis_guides/` before generating code.
 For **Survey-Weighted** analysis, also load `survey_weighted.md`. For NHIS claims-based studies, load `nhis_icd10_mapping.md`.
+For **transfusion-medicine / hemovigilance** data (reaction rates, transfusion as an exposure, component ratios, unit or donor attributes, donor cohorts, alloimmunization), load `transfusion_hemovigilance.md` — the denominator, immortal-time, and donor–recipient cross-classification rules there apply before any model choice.
 For test selection guidance, load `${CLAUDE_SKILL_DIR}/references/analysis_guides/test_selection.md`.
 
 ### Phase 3: Execute
@@ -396,308 +398,23 @@ tbl %>% as_flex_table() %>% flextable::save_as_docx(path = "table.docx")
 
 ## Analysis-Specific Guidelines
 
-### Table 1 (Demographics)
+The per-type operating rules (templates, required outputs, pitfalls) live in
+`references/analysis_specific/` and are read **after** Phase 2 has fixed the analysis type —
+read only the file(s) the approved plan needs, together with the methodology guide the Phase 2
+table points to.
 
-- Template: `references/templates/table1_demographics.py`
-- Table type guide: `references/table-standards/table-types/table1_demographics.md`
-- Continuous variables: mean +/- SD if normal, median (IQR) if skewed
-- Categorical variables: n (%)
-- Binary variables: show only one level (e.g., Male n (%), not both Male and Female)
-- Compare groups: t-test/Mann-Whitney for continuous, chi-square/Fisher for categorical
-- Report standardized mean differences (SMD) if requested (preferred over P for PS-matched studies)
-- RCTs: P values in Table 1 are usually unnecessary per CONSORT
-- gtsummary `tbl_summary()` with journal theme for R pipeline
+| Analysis type(s) in the approved plan | Read | Cost if read blindly |
+|---|---|---|
+| Table 1, diagnostic accuracy (incl. NRI/IDI), inter-rater agreement, survey/Likert (reverse-coding guard), group comparison, correlation | `references/analysis_specific/descriptive_diagnostic.md` | ~1,400 tokens |
+| Meta-analysis, DTA meta-analysis, network meta-analysis, health economic evaluation | `references/analysis_specific/evidence_synthesis.md` | ~1,500 tokens |
+| Survival, interval-censored survival, competing risks | `references/analysis_specific/time_to_event.md` | ~1,700 tokens |
+| Logistic / linear regression, propensity score, survey-weighted, mediation, interaction, multiple testing, Mendelian randomization, PRS, NHIS claims, burden of disease, repeated measures | `references/analysis_specific/regression_causal.md` | ~4,300 tokens |
+| **Any multivariable adjustment** (covariate pitfalls: structural zeros and dose/duration variables; over-adjustment in cross-sectional outcome models) | `references/analysis_specific/regression_causal.md` § Covariate Pitfalls / § Covariate Selection | (same file) |
+| Transfusion medicine / hemovigilance (reaction rates, transfusion exposure, component ratios, storage age / donor attributes, donor studies, alloimmunization) | `references/analysis_guides/transfusion_hemovigilance.md` plus the file above for the model family used | ~3,000 tokens |
 
-### Diagnostic Accuracy
-
-- **Methodology guide**: `references/analysis_guides/diagnostic_accuracy.md` (**load before generating code** — every metric with a CI on a stated analysis unit; the confidence-weighted trap [unweighted-baseline AUC + monotonic-encoding check, produce-side of probe D9]; paired DeLong vs MRMC for reader-generalising claims; per-stratum admissibility [D10]; one-scale-per-comparison [D11])
-- Template: `references/templates/diagnostic_accuracy.py`
-- Always report: sensitivity, specificity, PPV, NPV, accuracy, AUC
-- CIs: Wilson score for proportions, DeLong for AUC
-- ROC curve: include diagonal reference line, AUC in legend
-- If comparing models: DeLong test for AUC comparison
-- Youden's index for optimal threshold when applicable
-- Include calibration assessment (Brier score, calibration plot) for prediction models
-- **NRI/IDI**: When comparing two models (e.g., base model vs model + AI score), report:
-  - Category-based NRI (with clinically defined risk categories)
-  - Continuous NRI (note: tends to be inflated — report alongside category-based)
-  - IDI (Integrated Discrimination Improvement)
-  - Bootstrap 95% CIs (1000+ iterations)
-  - These supplement, not replace, DeLong AUC comparison
-- Table type guide (added value beyond a baseline): `references/table-standards/table-types/incremental_value.md` (paired ΔAUC + DeLong CI, continuous NRI with event/non-event split, IDI, net benefit at a prespecified threshold, same-patient/calibrated-first discipline). Pairs the decision-curve exemplar `make-figures` `references/exemplar_plots/decision_curve.md`.
-- Reader study (MRMC): `references/table-standards/table-types/reader_study.md` (per-reader + reader-averaged AUC with an Obuchowski–Rockette/DBM reader+case CI, per-patient vs per-lesion unit, superiority vs non-inferiority margin). Use an MRMC method (not a fixed-reader DeLong CI) for a claim that generalises to readers. Pairs `make-figures` `references/exemplar_plots/mrmc_roc.md`.
-
-### Inter-rater Agreement
-
-- **Methodology guide**: `references/analysis_guides/agreement_reliability.md` (**load before generating code** — the pseudoreplication trap for clustered/repeated measurements + the pseudoreplication-safe per-subject / mixed-effects code, ICC model/type selection, agreement-vs-reliability distinction; pairs with self-review probe O18)
-- Table type guide: `references/table-standards/table-types/agreement.md` (ICC with model/type + CI, weighted κ for ordinal, Bland–Altman bias + LoA, reliability-vs-agreement distinction, common errors)
-- Template: `references/templates/agreement_analysis.py`
-- 2 raters + categorical: Cohen's kappa
-- 2+ raters + categorical: Fleiss' kappa (or Krippendorff's alpha)
-- Continuous: ICC (specify model: one-way, two-way random/mixed; type: single/average)
-- Always report interpretation labels (Landis & Koch or Cicchetti)
-- Bland-Altman plot for continuous paired measurements
-- Bootstrap CIs (1000 iterations, seed=42)
-
-### Meta-analysis
-
-- Prefer R (meta/metafor packages) for meta-analysis
-- **Comparative**: `metabin()` for binary outcomes (OR/RR), `metagen()` for continuous
-  - Use `method = "Inverse"`, `method.tau = "DL"`, `method.random.ci = "HK"`
-  - Avoid deprecated args: `comb.fixed` → `common`, `hakn` → `method.random.ci`
-- **Single-arm pooled proportion**: `metaprop()` with `sm = "PLOGIT"`, `method.ci = "CP"`
-  - **Small-study test branch**: do **not** use Egger's regression for a single-arm proportion meta-analysis — funnel-asymmetry tests assume an effect-size-vs-SE relationship that does not hold for raw proportions. If a small-study assessment is needed, use Peters' test or an arcsine-based variant, and only when `k >= 10` (note underpowered otherwise)
-  - **Standard output**: report `tau-squared` on the logit scale and a **95% prediction interval** (`metaprop(..., prediction = TRUE)`) in addition to the pooled estimate; the PI conveys where a future study's proportion is expected to fall under the random-effects model
-- **Nested observation units**: if the proportion's unit is nested within study (e.g., per-lesion within study, per-image within patient), do **not** report a naive Wilson/binomial CI that ignores clustering — use a cluster-bootstrap or a GLMM with a random intercept per study so the CI reflects the design
-- Heterogeneity: I-squared, Q test, tau-squared, and a 95% prediction interval for the random-effects pooled estimate
-- Forest plot: individual studies + pooled estimate
-- Funnel plot + Egger's test for publication bias (comparative effect sizes only; note: underpowered k<10)
-- Sensitivity analysis: leave-one-out (`metainf()`)
-- Subgroup: `update(res, subgroup = variable)`
-
-### DTA Meta-Analysis
-
-- Template: `references/templates/dta_meta_analysis.R`
-- Prefer R (`mada`, `meta`, `metafor` packages) for DTA meta-analysis
-- **Bivariate model** (Reitsma): `mada::reitsma()` — recommended over separate pooling of Se/Sp
-  - Accounts for correlation between sensitivity and specificity
-  - Produces SROC curve with confidence + prediction regions
-- **Key outputs**: Pooled Se/Sp (95% CI), positive/negative LR, DOR, SROC AUC
-- **Threshold effect**: Spearman correlation between logit(Se) and logit(FPR)
-  - If significant: interpret single pooled Se/Sp with caution, emphasize SROC curve
-- **Forest plots**: Paired (sensitivity + specificity side by side)
-- **Publication bias**: Deeks' funnel plot asymmetry test (NOT standard funnel plot)
-  - Standard funnel plots are inappropriate for DTA studies
-  - Note: underpowered for k < 10
-- **Dual approach** (comparative + single-arm):
-  - Primary: `metabin()` for comparative studies (OR/RR)
-  - Secondary: `metaprop()` with `sm = "PLOGIT"` for single-arm pooled proportion
-  - Use `method = "Inverse"`, `method.tau = "DL"`, `method.random.ci = "HK"`
-- **Small studies (k < 10)**: bivariate model may not converge; consider narrative synthesis
-- **Alternative**: If `mada` unavailable, use `metafor::rma.mv()` with bivariate structure
-
-### Network Meta-Analysis
-
-- **Guide**: Load `analysis_guides/network_meta_analysis.md` before generating code
-- For ≥3 interventions via combined direct + indirect evidence (incl. component NMA); pairwise machinery (search/screening/random-effects model) via the Meta-analysis section above
-- **Assess transitivity before pooling**: compare effect-modifier distributions across comparisons (box plots / table) and/or network meta-regression — it is a clinical judgment, not a test
-- **Test consistency** globally (design-by-treatment) AND locally (node-split / back-calculation); a **star network (no closed loops) cannot be checked** — state it; investigate the source of any inconsistency (often one trial)
-- R `netmeta` (frequentist: `netsplit`, `decomp.design`, `netheat`, `netrank` P-scores, comparison-adjusted `funnel`) or Bayesian `gemtc` / `multinma` / `BUGSnet` (node-split, SUCRA, DIC)
-- Present a **network plot** (node ∝ sample size, edge ∝ #trials); report global **τ²**; **ranking (SUCRA/P-score) is not a superiority test** — report it with the league table, intervals, and certainty
-- Certainty **per estimate** via **CINeMA / GRADE-NMA** (downgrade indirect-only); component NMA assumes **additivity** (state/check it). Report against **PRISMA-NMA**; risk of bias via **RoB-NMA**. Review-side probes: NM1–NM8 in `network_meta_analysis.md`
-
-### Health Economic Evaluation
-
-- **Guide**: Load `analysis_guides/health_economic_evaluation.md` before generating code
-- For cost-effectiveness (CEA), cost-utility (CUA, QALY), cost-benefit (CBA), cost-minimisation, or budget-impact analyses; trial-based or decision-model-based (decision tree, **Markov/state-transition**, discrete-event simulation)
-- Compute **incremental cost ΔC, incremental effect ΔE, and the ICER = ΔC/ΔE**; with ≥3 options remove **dominated / extended-dominated** strategies before sequential ICERs; prefer **net benefit (INMB = λΔE − ΔC)** for regression/probabilistic summaries
-- State and justify the **perspective, time horizon (lifetime for chronic disease), discount rate (both costs and outcomes), currency + price year**; QALYs from a named preference-based instrument + value set
-- **Uncertainty is the analytic core**: one-way / **tornado** for drivers, **probabilistic sensitivity analysis (PSA)** with justified parameter distributions (beta for probabilities/utilities, gamma/log-normal for costs) → **cost-effectiveness plane + CEAC**; scenario analyses for structural choices
-- R `heemod` / `dampack` / `hesim` / `BCEA` (state-transition + PSA + CEAC + EVPI), `flexsurv` for survival extrapolation. Report against **CHEERS 2022**; make the "cost-effective" conclusion conditional on a stated willingness-to-pay threshold. Review-side probes: HE1–HE8 in `health_economic_evaluation.md`
-
-### Survey/Likert
-
-- Descriptive: median, IQR, frequency distribution per item
-- Internal consistency: Cronbach's alpha with item-total correlations
-- **Reverse-coding guard (run before reliability)**: a negatively-worded scale item must be recoded `(min+max) - x` before computing the scale total or Cronbach's alpha. An un-recoded reverse item produces a *negative* item-rest correlation and a negative alpha — which is a coding bug, **not** evidence of a multidimensional construct (do not defend it as such; you lose a review round). `likert_summary.py` prints the per-item item-rest correlations, flags negative ones as reverse-code suspects, warns loudly on a negative alpha, and accepts `--reverse-items E3 ...` to apply the recode before scoring. To screen at cleaning time, run `/clean-data` `scripts/check_reverse_coding.py`. See the global rule `survey-scale-reliability.md`.
-- If comparing groups: Mann-Whitney or Kruskal-Wallis (ordinal data)
-- Visualization: diverging stacked bar chart
-
-### Survival Analysis
-
-- **Methodology guide**: `references/analysis_guides/survival.md` (**load before generating code** — competing risks first [naive 1−KM overestimates → produce the Aalen–Johansen/Fine–Gray CIF; cause-specific vs subdistribution for which question, produce-side of probe S3]; PH check → RMST when violated; reverse-KM follow-up + C-index variant [S6]; estimand provenance [S8])
-- Table type guide: `references/table-standards/table-types/survival_results.md` (Cox results table: events/person-time, reverse-KM median follow-up, univariable + adjusted HR with CI, PH-assumption footnote, EPV/sparse-stratum and RMST-when-PH-violated rules)
-- Kaplan-Meier curves with number-at-risk table
-- Log-rank test for group comparison
-- Cox proportional hazards: report HR (95% CI)
-- **Events-per-variable (EPV) gate**: check `events / n_covariates >= 10` before fitting Cox (mirror of the logistic EPV rule). Warn if violated and fall back to a Firth/penalized Cox or profile-likelihood CIs; do not report Wald CIs from a sparse-event model as if stable
-- **Nested observation units (cluster-robust CI)**: when a subject contributes more than one analysed unit (multiple lesions, both eyes, repeated episodes), pass a subject id so the HR CIs use a robust cluster-sandwich variance (`coxph(..., cluster = id)` / `robust = TRUE` in R, `cluster_col=` in lifelines, e.g. `survival_analysis.py --cluster <id>`). Treating correlated rows as independent understates the standard errors and narrows the CI artificially
-- Check proportional hazards assumption (Schoenfeld residuals)
-- **PH violation → do not report a single time-averaged HR.** If the Schoenfeld global test is significant (or a covariate's residual trends with time), a single Cox HR averages a changing effect and is misleading. Report a piecewise / time-stratified HR (split follow-up at a clinically sensible cut, or `tt()` time-transform), or switch to RMST difference at a fixed horizon, and state the violation explicitly
-- **Horizon vs follow-up.** Do not read a KM/CIF estimate at a horizon beyond the data: if a reported time point (e.g., a 15-year cumulative incidence) exceeds the reverse-KM median follow-up, either restrict the horizon to where the risk set is non-trivial or report the number-at-risk at that horizon so the reader can judge the extrapolation
-- Report median survival with 95% CI
-- **Warranty period / quantile estimands (T25 etc.)**: Time to a fixed cumulative incidence. Use `quantile()` from the KM/`survfit` object and **always emit the 95% CI** (the lower/upper from `quantile(km, conf.int=TRUE)`, or a log-transformed / bootstrap CI) alongside the events/n that define it. A quantile point estimate reported without its CI is incomplete. If the event rate is below the target quantile, report "not reached" and consider Weibull parametric extrapolation (also with an interval)
-
-### Interval-Censored Survival
-
-When exact event times are unknown (e.g., health screening cohorts where status changes are detected at periodic visits), standard KM underestimates time-to-event. Use interval-censored methods:
-
-- **R packages**: `icenReg` (parametric/semi-parametric IC regression), `interval` (NPMLE/Turnbull), `survival` (Surv type "interval2")
-- **Turnbull estimator**: Non-parametric MLE for interval-censored data — analogous to KM but accounts for the interval between last negative and first positive observation
-- **Parametric IC models**: Weibull or log-logistic via `icenReg::ic_par()`. Report shape/scale parameters and compare AIC across distributions
-- **Mid-point imputation**: Simple approximation — event time = midpoint of (last negative, first positive). Acceptable as sensitivity analysis but NOT as primary method
-- **When to use**: Serial measurement cohorts (e.g., health screening databases), cancer screening intervals, repeated biomarker assessments
-- **Auto-trigger**: if the event date is defined by a periodic visit / scheduled re-examination (the event is detected *at* a visit, not observed exactly), interval-censoring is not optional — make an IC model the **primary** analysis, or at minimum a mandatory pre-specified sensitivity analysis, and do not present a right-censored Cox `coxph()` on visit-dated events as if the times were exact
-- **Multistate / transition models**: for repeated transitions (e.g., `msm`), account for subject-level clustering with a subject random effect or a sandwich (robust) variance, and check the time-homogeneity assumption (constant transition intensities) before trusting a single rate
-- **Reporting**: State the interval-censored nature of the data explicitly in Methods. Report both standard KM (for comparability with prior literature) and IC estimates (as primary or sensitivity)
-
-### Competing Risks
-
-When death or other events preclude the outcome of interest, standard KM overestimates cumulative incidence (treats competing events as censored). Use competing risk methods:
-
-- **R packages**: `cmprsk` (Fine-Gray), `tidycmprsk` (tidy interface), `survival` (cause-specific Cox)
-- **Cumulative incidence function (CIF)**: `cmprsk::cuminc()` — replaces 1-KM for each event type. Gray's test for group comparison
-- **Fine-Gray subdistribution hazard**: `cmprsk::crr()` or `tidycmprsk::crr()` — reports subdistribution HR (sHR) with 95% CI. Interpretable as effect on CIF directly. **Check the subdistribution-PH assumption** the same way you check it for Cox (a time-interaction term on the subdistribution scale, or inspection of scaled-residual analogues); a constant sHR is an assumption, not a given. Report the cause-specific HR alongside it so the etiologic and prognostic readings are both visible
-- **Cause-specific Cox**: Standard Cox censoring competing events — reports cause-specific HR. Better for etiology; Fine-Gray better for prognosis/prediction
-- **When to use**: Mortality studies with multiple causes of death, cardiovascular events when non-CV death is frequent, any outcome where competing events are common (>5% of total events)
-- **Reporting**: Present CIF plots (NOT 1-KM) when competing risks exist. Report both cause-specific HR and subdistribution HR when the research question is etiologic. State which competing events were defined. When a CIF is quoted at a horizon beyond the median follow-up, report the number-at-risk at that horizon (or restrict the horizon) — a CIF extrapolated past the data is not a stable estimate
-
-### Group Comparison
-
-- 2 independent groups: t-test or Mann-Whitney U
-- 2 paired groups: paired t-test or Wilcoxon signed-rank
-- 3+ independent groups: ANOVA or Kruskal-Wallis, with post-hoc
-- 3+ paired groups: repeated measures ANOVA or Friedman, with post-hoc
-- Always report: test statistic, degrees of freedom, p-value, effect size
-
-### Correlation
-
-- Pearson r (if bivariate normal) or Spearman rho (if not)
-- Report: coefficient, 95% CI, p-value
-- Scatter plot with regression line and CI band
-- For multiple variables: correlation matrix heatmap
-
-### Logistic Regression
-
-- **Guide**: Load `analysis_guides/regression.md` before generating code
-- **Template**: `references/templates/regression.py` (set `regression_type = "logistic"`)
-- Run univariable analysis first, then multivariable with clinically selected variables
-- Required outputs: OR table (univariable + multivariable), C-statistic (95% CI), and **calibration** (intercept + slope + flexible plot — **not** Hosmer–Lemeshow, which is deprecated; see the calibration guide)
-- **Prediction-model calibration guide**: `references/analysis_guides/calibration.md` (**load before generating code** for any model that outputs a risk used for a decision — the apparent slope of exactly 1.00 is the in-sample tell, so produce the **bootstrap optimism-corrected** slope/intercept; Van Calster's calibration levels; scaled Brier; why Hosmer–Lemeshow is dropped; produce-side of probe S7)
-- Check VIF < 5, EPV >= 10 (warn if violated)
-- **Nested observation units**: when rows are clustered within subjects (multiple lesions/visits per patient), use cluster-robust standard errors (`cov_type="cluster"`, `cov_kwds={"groups": id}` in statsmodels) or a mixed-effects logistic model — a naive logit CI assumes independent rows and is too narrow
-- Box-Tidwell test for continuous predictor linearity
-- Forest plot of adjusted ORs
-- NRI/IDI if comparing models (incremental value assessment)
-
-### Linear Regression
-
-- **Guide**: Load `analysis_guides/regression.md` before generating code
-- **Template**: `references/templates/regression.py` (set `regression_type = "linear"`)
-- Required outputs: coefficient table (β, 95% CI, P), R²/adjusted R², VIF
-- Always generate 4-panel diagnostic plot (residuals vs fitted, Q-Q, scale-location, leverage)
-- Check assumptions: normality of residuals, homoscedasticity, multicollinearity
-- Report both unstandardized β (primary) and standardized β (for effect size comparison)
-
-### Propensity Score
-
-- **Guide**: Load `analysis_guides/propensity_score.md` before generating code
-- **Template**: `references/templates/propensity_score.py`
-- Step 1: PS estimation (logistic regression)
-- Step 2: Apply method (matching with caliper = 0.2 × SD logit PS, IPTW/SIPTW with stabilized weights, or overlap weighting)
-- Step 3: Balance assessment — SMD < 0.10 for all covariates, Love plot mandatory
-- Step 4: Weighted/matched outcome analysis with robust SE
-- Step 5: Sensitivity analysis (E-value for unmeasured confounding)
-- Always state the estimand (ATE/ATT/ATO) explicitly
-- Recommend overlap weighting as default (no extreme weight issues)
-- **SIPTW**: Stabilized IPTW variant used in emulated target trial frameworks; report effective sample size
-
-### Survey-Weighted Analysis
-
-- **Guide**: Load `analysis_guides/survey_weighted.md` before generating code
-- **Template**: `references/templates/survey_weighted_analysis.py`
-- For KNHANES/NHANES/KCHS and similar complex survey designs
-- Always declare survey design (strata, cluster/PSU, weight) before analysis
-- Use correct weight variable (interview vs exam vs nutrition)
-- R `survey` package strongly recommended over Python for publication
-- Sequential model building: Model 1 (age+sex) → Model 2 (full adjustment)
-- Report weighted odds ratios (wOR) with 95% CI
-- Cross-national: analyze each country separately, never pool
-- Subgroup analysis: exclude the stratification variable from covariates
-
-### Mediation Analysis
-
-- **Guide**: Load `analysis_guides/mediation.md` before generating code
-- Bootstrapped product-of-coefficients (a×b) indirect effect (R `mediation` / `CMAverse` / PROCESS); ≥2000 resamples, bias-corrected percentile CI — not the Sobel test
-- **Binary outcome**: counterfactual / natural-effects decomposition (`CMAverse`, `regmedint`), not the naive OR product
-- Report total, direct, indirect effects each with a bootstrap CI; **proportion mediated only with uncertainty and only when the total effect is well-estimated** (unstable / can exceed 100% when total is near-null)
-- **Identification, not the bootstrap, is the issue**: mediation needs no unmeasured mediator–outcome confounding (sequential ignorability) → report an **E-value for the indirect effect** (or ρ-based sensitivity). A cross-sectional design cannot order X→M→Y — frame as association-level (review probe O13)
-- Report against **AGReMA**
-
-### Interaction & Effect Modification
-
-- **Choose and state the scale.** A public-health / biological **synergy** claim is an **additive**-scale statement → report **RERI**, **AP** (attributable proportion), or **S** (synergy index), each **with a CI** — not only a multiplicative OR/HR product term. A non-significant multiplicative interaction is compatible with a large additive one (and vice versa)
-- **"Joint association" via a combined multi-level exposure** (high/high vs low/low) shows joint *categories*, not interaction — add the product term (multiplicative) and/or RERI (additive) to claim interaction
-- **Stratified-only** "stronger in A than B" is the difference-in-significance fallacy — report the formal interaction term, not two separate stratum estimates
-- R `interactionR` / `epiR` for RERI/AP/S with CIs; follow Knol & VanderWeele interaction-reporting recommendations. Review-side probe: O14 in `observational_confounding.md`
-
-### Multiple Testing & High-Dimensional Screening
-
-- **Guide**: Load `analysis_guides/multiplicity.md` before generating code
-- For agnostic many-exposure scans (ExWAS / EWAS / MWAS / proteome-/nutrient-wide) and any "screen N predictors, report the significant ones" pass
-- **Match the correction to the claim**: FWER (Bonferroni / Holm / permutation-based study-wide threshold) for a confirmatory single hit; FDR (Benjamini–Hochberg q-value) for discovery — then frame as hypothesis-generating
-- Report the correction method **and the number of tests `m`** (the denominator), applied to the whole tested set — never shrink `m` to the winners
-- **Replication is the real safeguard**: split-half / second cohort / cross-cycle with directional concordance and a reported replication rate; a single-cohort FDR-significant scan is exploratory
-- Correlated exposures → raw Bonferroni is over-conservative (permutation or effective-number-of-tests via `poolr::meff()`); a univariate hit may be a marker for a correlated cause (consider WQS / quantile g-computation / BKMR before causal reading)
-- Report full results (all effect sizes + p/q), not only winners; complex surveys combine design-based SEs (`survey_weighted.md`) WITH the correction. Review-side probe: O17 in `observational_confounding.md`
-
-### Mendelian Randomization
-
-- **Guide**: Load `analysis_guides/mendelian_randomization.md` before generating code
-- For genetic-instrument causal inference: two-sample summary-data MR, one-sample MR, MVMR, drug-target / cis-MR, non-linear MR
-- **State and evidence the 3 IV assumptions**: relevance (F-statistic / R²), independence (ancestry + confounder scan), exclusion restriction (no horizontal pleiotropy — the untestable one)
-- **Pre-specify the full sensitivity suite, not IVW alone**: IVW + MR-Egger (intercept = directional pleiotropy) + weighted median + weighted mode + MR-PRESSO; Cochran's Q + leave-one-out; concordance across methods is the robustness claim (R `TwoSampleMR` / `MendelianRandomization`)
-- Address **reverse causation** (Steiger / bidirectional), **sample overlap** (report fraction; overlap + weak instruments inflate type-1 error), **winner's curse** (select instruments in an independent GWAS), and ancestry matching
-- **Drug-target / cis-MR**: GLS-IVW for correlated cis variants + colocalization (`coloc`) + positive control + adverse-effect phenome scan. **Non-linear MR**: residual/doubly-ranked shapes can be artefactual → require negative/positive controls + extreme-stratum sensitivity
-- Interpret as a **lifelong genetic-proxy effect direction**, not a clinical-intervention magnitude; report against **STROBE-MR**. Review-side probes: MR1–MR8 in `mendelian_randomization.md`
-
-### Polygenic Risk Score (PRS / PGS)
-
-- **Guide**: Load `analysis_guides/polygenic_risk_score.md` before generating code
-- For developing/validating/applying a genome-wide polygenic score as a predictor or risk-stratifier (distinct from MR: PRS is prediction, MR is causal inference)
-- **Base (discovery GWAS) and target/validation samples must be independent**; tune (P+T / LDpred2 / PRS-CS shrinkage / quantile cut) on a separate tuning set and evaluate out-of-sample (avoid overfitting / winner's curse). Tools: PRSice-2, LDpred2 (`bigsnpr`), PRS-CS / PRS-CSx, BridgePRS
-- **Ancestry portability is the central issue**: report performance **separately per target ancestry** (within-group differences can rival between-group); prefer ancestry-matched / multi-ancestry discovery + PCs; do not extend a European-derived score to other ancestries without per-ancestry validation
-- Report **OR/HR per SD** (CI) + quantile **absolute risk**; discrimination (C/AUC) **and** calibration (plot + slope/intercept) in the target population — discrimination ≠ calibration
-- **Incremental value is the clinical crux**: report PRS **on top of** the guideline clinical model (SCORE2/QRISK3/PCE/Tyrer-Cuzick) — ΔC-statistic (CI), NRI/IDI, net benefit — not PRS-alone AUC. A screening claim needs detection-rate-at-fixed-FPR / likelihood ratio, not AUC
-- Prefer prospective/incident validation (prevalent case–control overstates utility); report against **PGS-RS** / TRIPOD+AI. Review-side probes: PG1–PG8 in `polygenic_risk_score.md`
-
-### NHIS Claims-Based Studies
-
-- **Guide**: Load `analysis_guides/nhis_icd10_mapping.md` for disease definition patterns
-- Claims-based algorithms: N-claim rule, claim+medication, look-back period
-- Always specify ICD-10 code ranges, claim count requirement, and time windows
-- Charlson comorbidity index: cite Quan 2005 adaptation
-- Anchor covariates to most recent data prior to index date
-- Sensitivity analysis: test stricter/looser disease definitions
-
-### Burden of Disease, Decomposition & Forecasting
-
-- **Guide**: Load `analysis_guides/burden_decomposition_forecasting.md` before generating code
-- For a burden-of-disease estimate, attributable-risk (PAF / comparative risk assessment), temporal-trend (joinpoint / AAPC), decomposition (Das Gupta; Arriaga life-expectancy), or forecast (BAPC / age-period-cohort)
-- **The value-add-layer playbook** — a descriptive rate is rarely publishable alone; bolt on ONE layer: decomposition (*why* the rate changed — aging vs population growth vs epidemiological change), PAF (*how much* is modifiable), joinpoint/AAPC pre-vs-post (did a datable policy/shock bend the trend), forecast (*where* it is going), Arriaga (which ages/causes drove ΔLE)
-- **Uncertainty intervals, not CIs**: report a draw-based 95% UI (2.5th–97.5th percentile of 250–500 draws propagated end-to-end); a UI crossing the null means insufficient evidence for direction, not a non-significant test
-- **Single-center cohort adaptation**: three layers port onto existing follow-up without new data — trend-break (reslice around a datable guideline/scanner-era change), forecast (project a serial imaging trajectory), and global framing (place the individual-level effect next to the published GBD burden from GHDx — contextualization, not re-estimation, so no GATHER trigger). The ecological "UI-replaces-confounding-control" shortcut does **not** port: individual-level data still needs the DAG / E-value / negative-control toolkit
-- Report the estimate against **GATHER** (`/check-reporting`); keep burden/attribution/decomposition/forecast descriptive or associational unless a causal design (natural experiment, MR — `analysis_guides/mendelian_randomization.md`) is in place
-
-### Repeated Measures
-
-- **Guide**: Load `analysis_guides/repeated_measures.md` before generating code
-- **Template**: `references/templates/repeated_measures.py`
-- Default method: **LMM** (handles missing data, no sphericity assumption)
-- RM ANOVA only if: no missing data AND few time points AND sphericity met
-- GEE for: population-averaged effects or non-normal outcomes
-- Always convert wide → long format first
-- **Time × Group interaction is the key result** — always report and interpret
-- Generate spaghetti plot (individual trajectories) + group mean trajectory plot
-- For LMM: report random effects structure, covariance structure (CS/AR1/UN), AIC/BIC
-- For RM ANOVA: report Mauchly's test, epsilon, correction method (Greenhouse-Geisser)
-- If missing > 5%: load `analysis_guides/missing_data.md` and apply MICE before analysis
-
-### Covariate Pitfalls: Structural Zeros & Dose/Duration Variables
-
-Applies to any multivariable adjustment (logistic / linear / Cox / propensity-score / survey-weighted). Two coupled failure modes around a **dose/duration variable anchored to a categorical exposure** (pack-years under smoking status, grams/week under alcohol use, cessation-duration under former-smoker):
-
-- **Structural-zero guard (do not impute):** a never-smoker's `pack_years` is a *structural zero*, not missing-at-random — the value is known to be 0 by definition of the category. Feeding it to MICE/MNAR imputation as if it were missing fabricates a non-zero dose for unexposed subjects and corrupts the exposure contrast. Before imputing any dose/duration column, set the implied zero explicitly (`IF status == 'never' THEN dose = 0`) and impute only the genuinely-missing residual among the exposed. `/clean-data` flags categorical-implied-zero contradictions (a `never` row with a NULL dose) and ships `scripts/check_structural_zero.py`.
-- **Complete-case collapse warning (use status, not dose, for adjustment):** when a dose/duration variable enters a *complete-case* multivariable model, the unexposed stratum — which carries structural zeros often stored as NULL — is dropped wholesale, collapsing n (commonly 40–60%) and distorting subgroup estimates (a small stratum can shrink to a handful of subjects). For confounder adjustment use the **categorical status** variable (never/former/current); reserve the continuous **dose** for an exposed-only (e.g., ever-smoker-restricted) *secondary* analysis. Always report n before and after model fitting and confirm the denominator did not silently collapse.
-
-### Covariate Selection: Over-adjustment in a Cross-Sectional Outcome Model
-
-Applies to any cross-sectional / single-visit outcome regression (the exposure and outcome are measured at one time point, so temporal order is not observed). The selection rule is **causal, not statistical**:
-
-- **Do not adjust for a consequence or mediator of the outcome.** A covariate that the outcome physiologically *drives* sits on or after the causal path; adjusting for it is over-adjustment / collider bias and removes part of the effect under study. The signature case is a renal-function outcome: with **eGFR** as the outcome, **serum uric acid** is renally excreted (a lower eGFR mechanically raises urate), so uric acid is an outcome-consequence, not a confounder; blood pressure and HbA1c are often similarly downstream. Classify each candidate covariate against a DAG as confounder / mediator / outcome-consequence / collider, and keep only confounders in the primary model.
-- **"It differs in Table 1" is not a confounder-selection criterion.** Baseline imbalance by exposure justifies *considering* a variable, but a mediator or outcome-consequence stays out regardless of how imbalanced it is. A kitchen-sink "adjust for everything that differs" model is over-adjusted by construction.
-- **Report the suspect-covariate sensitivity + VIF.** Make a parsimonious, history-/design-based model the primary one; report the fuller model as a sensitivity analysis that **drops** the suspect covariate (or adds it, if you start parsimonious), and show whether the headline estimate moves. Always print VIF (collinearity between an outcome-consequence and the outcome's other correlates is common) and the n actually fitted. If dropping the covariate materially changes the estimate, propagate to the abstract and conclusion.
-- **Compare adjusted-vs-unadjusted on the SAME frame (extended-adjustment missingness trap).** When an extended-adjustment model adds covariates that carry missingness, the analytic n shrinks (e.g. 84 → 49 events). Comparing that adjusted estimate to the **full-frame** unadjusted/base estimate confounds *adjustment* with *case-concentrated missingness* — it can look as if "adjustment inflated the estimate" when the drift is who-was-dropped. The fair anchor is the **unadjusted estimate refit on the reduced complete-case frame** (the same rows the adjusted model used): report unadjusted-and-adjusted **on the reduced frame** alongside the full-frame estimate, and never describe "adjustment changed the estimate" from a comparison across different frames. (Equivalently, use multiple imputation so all models share one frame.)
+**Load-on-demand**: read `${CLAUDE_SKILL_DIR}/references/analysis_specific/<file>.md` once the
+Phase 2 plan is approved and before generating code for that analysis type. A plan that mixes
+types (e.g. Table 1 + Cox + propensity score) reads each matching file.
 
 ## Language
 

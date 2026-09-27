@@ -53,6 +53,7 @@ Buckets:
 | `skills/sync-submission/scripts/check_asset_anonymization.py` | A | Korean institution-token **detection** regex (`병원\|의료원\|의과대학\|대학교\|연구윤리`) for the asset-anonymization gate — the feature. |
 | `skills/present-paper/scripts/inject_pronunciation_notes.py` | A | Korean pronunciation dictionary for Korean-presenter speaker notes. |
 | `skills/present-paper/SKILL.md` | A/D | `[ 발음 ]` pronunciation-section header example + bilingual trigger. |
+| `skills/present-paper/references/mode_a_build.md` | B | A practitioner quote ("draw diagrams as code, then insert") moved verbatim from `present-paper/SKILL.md` when the Mode A build internals were extracted; it is prose, not a locale feature, and is a candidate for translation. |
 | `skills/fill-protocol/SKILL.md` | A/D | Korean institutional-form fill examples + `맑은 고딕` font + bilingual trigger. |
 | `skills/fill-protocol/scripts/fill_form.py` | A | `맑은 고딕` default CJK font for Korean .docx forms. |
 | `skills/fill-protocol/examples/example_irb_template.yaml` | A | Korean IRB template example (`국문`, `맑은 고딕`). |

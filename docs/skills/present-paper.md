@@ -57,6 +57,7 @@
 - `generate_pptx_templates.py`
 - `generated_illustrations.md`
 - `medical_presentation_templates.md`
+- `mode_a_build.md`
 - `presentation_archetypes.md`
 - `presentation_design_guidelines.md`
 - `slide_design_principles.md`

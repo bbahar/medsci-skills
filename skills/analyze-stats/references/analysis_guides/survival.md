@@ -6,7 +6,7 @@ call; the ways these analyses fail review are (1) ignoring **competing risks** s
 hazard ratio** when the proportional-hazards assumption is violated, and (3) **estimand
 drift** — quoting a subdistribution hazard for an etiologic claim or a cause-specific hazard
 for an absolute-risk claim. This guide produces the right estimand; the operational caveats
-(EPV gate, cluster-robust CIs, interval-censoring) live in the SKILL.md `### Survival
+(EPV gate, cluster-robust CIs, interval-censoring) live in `references/analysis_specific/time_to_event.md` `### Survival
 Analysis` section.
 
 ---
