@@ -1852,6 +1852,11 @@
       "sha256": "bb3ac6c10aa733cb4fbeb823ed5288001fa5a72e8aa0e47cd87b9f80a0b0310d"
     },
     {
+      "path": "skills/find-journal/references/journal_profiles/Transfusion.md",
+      "size": 2747,
+      "sha256": "e4e3df00b8228e76c33c91147af30268e5997fdc1ef55061538c2661bec08ed8"
+    },
+    {
       "path": "skills/find-journal/references/journal_profiles/Vox_Sanguinis.md",
       "size": 2722,
       "sha256": "407f753d1341e6f159b59368645b4e1237763f3d0a94f771561eabcbe106c6dd"
@@ -6482,9 +6487,14 @@
       "sha256": "723b0f5e91be86298401ea2f1b6e76675881675de1a7622dde8de906f0033a2f"
     },
     {
+      "path": "skills/write-paper/references/journal_profiles/Transfusion.md",
+      "size": 12030,
+      "sha256": "ad08b86abed138ae109e744d6d3cdbdcf3f2ba12922ce734e0522e53026e7c38"
+    },
+    {
       "path": "skills/write-paper/references/journal_profiles/Vox_Sanguinis.md",
-      "size": 11272,
-      "sha256": "84d10c2aad8102bf9c93b2cfc8841b470e6f8c91a8a4d5a1d9d02806be74c832"
+      "size": 11531,
+      "sha256": "f2af3d0338e5dcbf257bd335dbe4d17dd8d4ef906b7423aa409e170520533fae"
     },
     {
       "path": "skills/write-paper/references/journal_profiles/World_Journal_of_Hepatology.md",

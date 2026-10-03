@@ -149,10 +149,10 @@ https://onlinelibrary.wiley.com/page/journal/14230410/homepage/forauthors.html
 
 | Dimension | Vox Sanguinis | Transfusion | Transfusion Medicine |
 |-----------|---------------|-------------|----------------------|
-| Society | International Society of Blood Transfusion (ISBT) | AABB [VERIFY] | British Blood Transfusion Society (BBTS) [VERIFY] |
-| Scope | All aspects of blood transfusion and cellular therapies; eight main sections | [VERIFY against the journal's scope statement] | [VERIFY against the journal's scope statement] |
+| Society | International Society of Blood Transfusion (ISBT) | AABB (Association for the Advancement of Blood and Biotherapies) | British Blood Transfusion Society (BBTS) [VERIFY] |
+| Scope | All aspects of blood transfusion and cellular therapies; eight main sections | Blood banking, transfusion medicine, cellular and gene therapies | [VERIFY against the journal's scope statement] |
 | Impact factor | [TODO: verify] | [TODO: verify] | [TODO: verify] |
-| Emphasis | International; ISBT Working Party reports and International Forum | [VERIFY] | [VERIFY] |
-| Original Article length | 5,000 words total (including references and tables) | [VERIFY] | [VERIFY] |
+| Emphasis | International; ISBT Working Party reports and International Forum | How Do I …; Rapid Review; Blood Group Genomics allele reports; case reports accepted | [VERIFY] |
+| Original Article length | 5,000 words total (including references and tables) | 3,500 words excluding abstract, references and legends; 8 figures/tables | [VERIFY] |
 
-<!-- Source verification: Vox Sanguinis author guidelines text (forauthors.html, sections 1–9) pasted in full by the maintainer on 2026-10-03; every Vox Sanguinis field above is transcribed from that text. Print and online ISSN, editor and copyright holder (ISBT) transcribed from the journal masthead text pasted by the maintainer on 2026-10-03. Frequency, impact factor, acceptance rate and APC were not in the source and are marked TODO. Competitor columns are not sourced from those journals' own pages and are marked VERIFY. -->
+<!-- Source verification: Vox Sanguinis author guidelines text (forauthors.html, sections 1–9) pasted in full by the maintainer on 2026-10-03; every Vox Sanguinis field above is transcribed from that text. Print and online ISSN, editor and copyright holder (ISBT) transcribed from the journal masthead text pasted by the maintainer on 2026-10-03. Frequency, impact factor, acceptance rate and APC were not in the source and are marked TODO. Transfusion column from that journal's pasted author guidelines (2026-10-03); Transfusion Medicine column not sourced and marked VERIFY. -->
