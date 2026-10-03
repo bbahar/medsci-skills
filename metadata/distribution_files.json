@@ -1852,6 +1852,11 @@
       "sha256": "bb3ac6c10aa733cb4fbeb823ed5288001fa5a72e8aa0e47cd87b9f80a0b0310d"
     },
     {
+      "path": "skills/find-journal/references/journal_profiles/Vox_Sanguinis.md",
+      "size": 2722,
+      "sha256": "407f753d1341e6f159b59368645b4e1237763f3d0a94f771561eabcbe106c6dd"
+    },
+    {
       "path": "skills/find-journal/references/journal_profiles/World_Journal_of_Hepatology.md",
       "size": 3707,
       "sha256": "912a14910717f00306a8f94a7b1ec4cd81a2690dae0dcabe1a85d7e82e109eb2"
@@ -6475,6 +6480,11 @@
       "path": "skills/write-paper/references/journal_profiles/The_Lancet_Digital_Health.md",
       "size": 8944,
       "sha256": "723b0f5e91be86298401ea2f1b6e76675881675de1a7622dde8de906f0033a2f"
+    },
+    {
+      "path": "skills/write-paper/references/journal_profiles/Vox_Sanguinis.md",
+      "size": 11272,
+      "sha256": "84d10c2aad8102bf9c93b2cfc8841b470e6f8c91a8a4d5a1d9d02806be74c832"
     },
     {
       "path": "skills/write-paper/references/journal_profiles/World_Journal_of_Hepatology.md",
