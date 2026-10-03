@@ -1507,6 +1507,11 @@
       "sha256": "7662c66eb32bc6c40815d64ae08f923ab6ba8506725988bdb5db95a1f3a13601"
     },
     {
+      "path": "skills/find-journal/references/journal_profiles/Blood.md",
+      "size": 2757,
+      "sha256": "15c2b5ed3f0317d65c3799725434b121f8d64790f9380a225b5608de93117509"
+    },
+    {
       "path": "skills/find-journal/references/journal_profiles/British_Journal_of_Radiology.md",
       "size": 1808,
       "sha256": "354cc24f592eb38f787b326e3c3216539e2033ace23da982731edd2646a40d86"
@@ -6215,6 +6220,11 @@
       "path": "skills/write-paper/references/journal_profiles/Artificial_Intelligence_in_Medicine.md",
       "size": 3492,
       "sha256": "12a515fe526cb9cfcd09cabf168b9c47f2d1b6cb6918c74751bbb0f91d6558ff"
+    },
+    {
+      "path": "skills/write-paper/references/journal_profiles/Blood.md",
+      "size": 14619,
+      "sha256": "ea18e232eb236f695a06c31eaa55a63af7e81ad9b8151902f07ce84fe299549b"
     },
     {
       "path": "skills/write-paper/references/journal_profiles/British_Journal_of_Radiology.md",

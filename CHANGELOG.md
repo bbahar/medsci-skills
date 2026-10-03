@@ -4,6 +4,15 @@
 
 ### Added
 
+- Journal profiles for Blood, TRANSFUSION and Vox Sanguinis (`/write-paper` and
+  `/find-journal`), built from each journal's author-guidelines and masthead text.
+  Each records the details that most often trip a submission: Vox Sanguinis counts
+  references and tables inside its word limits, TRANSFUSION's abstract ends in
+  DISCUSSION and its title page must carry figure, table and reference counts, and
+  Blood requires 1–2 Key Points of at most 140 characters and a Data Sharing
+  Statement. Fields the source text did not cover (impact factors, open-access
+  terms, two journals' AI policies) are marked
+  TODO/VERIFY rather than filled from memory.
 - A transfusion-medicine and hemovigilance analysis guide for `/analyze-stats`
   (`references/analysis_guides/transfusion_hemovigilance.md`). It covers naming the
   denominator of a reaction rate (units issued vs transfused vs episodes vs patients),
