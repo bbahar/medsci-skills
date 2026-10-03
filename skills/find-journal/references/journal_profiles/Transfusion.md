@@ -2,8 +2,8 @@
 
 ## Identity
 - **Abbreviation:** Transfusion
-- **Publisher:** Wiley, for the Association for the Advancement of Blood and Biotherapies (AABB) [VERIFY publisher wording against the masthead]
-- **ISSN:** [TODO: verify at journal site] / [TODO: verify at journal site]
+- **Publisher:** Wiley; © AABB (Association for the Advancement of Blood and Biotherapies)
+- **ISSN:** 0041-1132 / 1537-2995
 - **Homepage:** [TODO: verify at journal site]
 - **Author guidelines:** [TODO: verify at journal site] (submission: https://authors.wiley.com/journal/TRF)
 
@@ -34,4 +34,4 @@ transfusion medicine, blood banking, blood transfusion, cellular therapy, gene t
 ## Special Notes
 AABB's journal; acceptance is on merit with equal consideration for members and nonmembers, review takes about six weeks and most papers need revision. The abstract's last heading is DISCUSSION (not Conclusion); the title page must carry the word count and the numbers of figures, tables and references or the manuscript is returned; figures and tables share a combined cap; blood group terminology follows ISBT conventions. Statistics: confidence intervals expected, not p values alone. AI policy: not stated in the author guidelines [VERIFY against Wiley's publisher-level policy].
 
-<!-- Source verification: author guidelines text pasted in full by the maintainer on 2026-10-03. ISSN, homepage, guidelines URL, tier, OA model and AI policy not in source. -->
+<!-- Source verification: author guidelines text pasted in full by the maintainer on 2026-10-03. ISSNs from the journal masthead text pasted on 2026-10-03. Homepage, guidelines URL, tier, OA model and AI policy not in source. -->

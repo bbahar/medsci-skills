@@ -4,8 +4,8 @@
 
 - **Full name**: TRANSFUSION
 - **Abbreviation**: Transfusion
-- **Publisher**: Wiley, for the Association for the Advancement of Blood and Biotherapies (AABB) [VERIFY publisher wording against the masthead]
-- **ISSN**: [TODO: verify at journal site] (print), [TODO: verify at journal site] (online)
+- **Publisher**: Wiley (submission via Wiley Research Exchange and Author Services); © AABB (Association for the Advancement of Blood and Biotherapies). Editor: Richard M. Kaufman
+- **ISSN**: 0041-1132 (print), 1537-2995 (online)
 - **Frequency**: [TODO: verify at journal site]
 - **Impact Factor**: [TODO: verify at journal site]
 - **Open Access**: [TODO: verify at journal site]
@@ -153,4 +153,4 @@ Not specified in the author guidelines [VERIFY]. Include any required permission
 | Case reports | Accepted (1,800 words) | Not encouraged | [VERIFY] |
 | Distinctive formats | How Do I …; Rapid Review; Blood Group Genomics allele reports; Transfusion Medicine Illustrated | ISBT Working Party reports; International Forum | [VERIFY] |
 
-<!-- Source verification: TRANSFUSION author guidelines text pasted in full by the maintainer on 2026-10-03; every TRANSFUSION field above is transcribed from that text. ISSN, frequency, impact factor, OA model, acceptance rate, peer-review type, AI policy and the guidelines URL were not in the source and are marked TODO/VERIFY. Vox Sanguinis column from that journal's pasted guidelines (2026-10-03); Transfusion Medicine column not sourced. -->
+<!-- Source verification: TRANSFUSION author guidelines text pasted in full by the maintainer on 2026-10-03; every TRANSFUSION field above is transcribed from that text. ISSNs, editor and copyright holder (AABB) transcribed from the journal masthead text pasted by the maintainer on 2026-10-03. Frequency, impact factor, OA model, acceptance rate, peer-review type, AI policy and the guidelines URL were not in the source and are marked TODO/VERIFY. Vox Sanguinis column from that journal's pasted guidelines (2026-10-03); Transfusion Medicine column not sourced. -->
