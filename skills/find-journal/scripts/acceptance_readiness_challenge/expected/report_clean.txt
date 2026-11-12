@@ -7,4 +7,4 @@ flags:
   (none)
 
 summary: design_ceiling=0 unfixable_defect=0 importance_risk=0 claim_mismatch=0 total=0
-ceiling: NO STRUCTURAL CEILING DETECTED BY LEXICAL SCAN
+ceiling: NO LISTED SIGNAL MATCHED - NOT A DESIGN CLEARANCE; ASSESS DESIGN CEILING BY JUDGEMENT

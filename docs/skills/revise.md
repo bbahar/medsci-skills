@@ -2,9 +2,9 @@
 
 # revise
 
-> Parse peer reviewer comments and generate a structured Response to Reviewers document with tracked manuscript changes. Classifies comments as MAJOR/MINOR/REBUTTAL, coordinates new analyses with /analyze-stats and /make-figures, and produces cover letter for editor.
+> Use when a manuscript comes back with reviewer or editor comments. Numbers every comment, classifies it MAJOR/MINOR/REBUTTAL, drafts a point-by-point response with tracked manuscript changes, routes new analyses to /analyze-stats and writes the cover letter.
 
-**Invoke:** `/revise` · **Tools:** Read, Write, Edit, Bash, Grep, Glob · **Model:** inherit
+**Invoke:** `/revise`
 
 ## When to use
 
@@ -30,6 +30,7 @@
 - `confirm every reviewer comment maps to a point-by-point response`
 - `/verify-refs --strict on new citations`
 - `python3 scripts/check_response_claims.py --response revision/response_to_reviewers.md --manuscript manuscript/manuscript.md --strict`
+- `python3 scripts/check_response_claims.py --response revision/response_to_reviewers.md --manuscript manuscript/manuscript.md --values revision_values.json --strict  # also check declared revision values`
 - `bash tests/test_response_claims.sh`
 - `python3 scripts/check_density_complaint.py --comments revision/decision_letter.md --previous manuscript/manuscript_R0.md --revised manuscript/manuscript.md --strict`
 - `bash scripts/density_complaint_challenge/verify.sh`
@@ -41,6 +42,7 @@
 **References** (`skills/revise/references/`):
 
 - `r2r_voice.md`
+- `revision_values_schema.md`
 
 **Scripts** (`skills/revise/scripts/`):
 
@@ -48,6 +50,10 @@
 - `check_density_complaint.py`
 - `check_response_claims.py`
 - `density_complaint_challenge/` (5 files)
+
+**Templates** (`skills/revise/templates/`):
+
+- `revision_values.json`
 
 ## Source
 

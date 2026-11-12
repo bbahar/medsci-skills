@@ -53,7 +53,9 @@ analysis completeness, and imputation-input integrity are separate subchecks (ru
 3. **E-value.** `EVALUE_ARITHMETIC` means the reported E-value does not recompute from
    its adjacent effect estimate (the value was likely produced for a different estimate);
    `EVALUE_NON_PRIMARY` means the E-value is attached to a secondary/exploratory estimate
-   but presented as if it bounded the headline claim. Both warrant a Major/Minor comment —
+   but presented as if it bounded the headline claim. The gate fails `--strict` on
+   `EVALUE_ARITHMETIC` only; `EVALUE_NON_PRIMARY` is an advisory flag to confirm by eye. Either
+   warrants a comment when confirmed —
    recompute the E-value for the **declared primary** estimate and its near-null confidence
    limit, and quote it there.
 
@@ -174,7 +176,7 @@ analysis completeness, and imputation-input integrity are separate subchecks (ru
     collapses opposite (call × confidence) cells and silently mis-estimates the AUC; a
     prose review cannot see an estimator bug. Run the encoding through the reusable
     monotonicity probe and ship its 10-combination unit test:
-    `python3 "${MEDSCI_SKILLS_ROOT}/skills/analyze-stats/scripts/rating_monotonicity.py" --encoding score_def.json`.
+    `python3 "${CLAUDE_SKILL_DIR}/../analyze-stats/scripts/rating_monotonicity.py" --encoding score_def.json`.
 
 11. **Figure-embedded numbers are text-grep blind.** PRISMA/flow/forest/statistic figures
     are rasterised, so every numeric audit above is blind to the numbers *inside* them.

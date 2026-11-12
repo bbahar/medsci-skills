@@ -51,7 +51,7 @@ else
 fi
 
 # --- 3. text that fits is left alone ---------------------------------------------------------------
-if python3 "$DET" "$FIX/deck.pptx" --bbox-xml "$FIX/clean.xml" | grep -q '^OK:'; then
+if python3 "$DET" "$FIX/deck.pptx" --bbox-xml "$FIX/clean.xml" | grep '^OK:' >/dev/null; then
   pass "a measurement where everything fits reports nothing"
 else
   bad "the clean measurement produced findings"
@@ -78,6 +78,18 @@ if grep -qE '[0-9]+\.[0-9]{2} in' <<<"$out"; then
   pass "...and both report the measured distance, not just a verdict"
 else
   bad "no measured distance in the report"; echo "$out"
+fi
+
+# --- 4. text that never reached the page ----------------------------------------------------------
+# A line that fell off the slide is not in the PDF, so there is no rectangle to measure. The deck
+# still has the paragraph; the page does not.
+out_un="$(python3 "$DET" "$FIX/deck.pptx" --bbox-xml "$FIX/unrendered.xml" || true)"
+if grep -q '\[UNRENDERED\] (slide 1)' <<<"$out_un" && grep -q "Recurrence was 12%" <<<"$out_un" \
+   && ! grep -q '(slide 2)' <<<"$out_un"; then
+  pass "a paragraph missing from its page is reported (and the slide whose text rendered is not)"
+else
+  bad "a paragraph that never reached the page passed — only rendered lines were compared"
+  echo "$out_un"
 fi
 
 if python3 "$DET" "$FIX/deck.pptx" --bbox-xml "$FIX/overflow.xml" --strict >/dev/null 2>&1; then

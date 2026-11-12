@@ -99,24 +99,32 @@ push and pull request. The authoritative list of every check is
 [`.github/workflows/validate.yml`](.github/workflows/validate.yml); the whole
 suite uses synthetic fixtures and needs no private data or network access.
 
-To run the same gates CI runs, install the test dependencies and run the mirror:
+**CI is the gate.** It runs every check on your pull request in about seven minutes, and `main`
+accepts a change only after CI has passed on it combined with the latest `main` (a repository
+ruleset; repository admins can bypass it). Before you push, run what your change touches:
 
 ```bash
-pip install pyyaml pandas numpy scipy scikit-learn matplotlib python-pptx python-docx fonttools
+pip install -r .github/requirements-ci.txt   # the versions CI pins (Python 3.11)
 # Also install pandoc, exiftool and poppler with your OS package manager.
 # Render regression tests generate LaTeX with pandoc; CI does not install TeX.
 
-# Runs every gate in the CI `validate` job, in order, locally. The step list is
-# parsed from validate.yml itself, so it can never drift from a hand-copied subset,
-# and each gate's flags (--strict, --check) come along. If this is green, CI's
-# validate job will be too. (--list to see the gates; --fail-fast to stop at the
-# first failure; --only SUBSTR to run one.)
-scripts/run_ci_mirror.sh
+# the tests of the skill you changed (search validate.yml for its name), then:
+bash scripts/validate_skills.sh --only <skill-name>
+python3 scripts/check_phase_budget.py --strict
+python3 scripts/gen_distribution_manifest.py --check   # if you added or edited a shipped file
 ```
 
-Do not maintain a shorter list by hand: a gate added to the workflow, or a `--strict`
-flag, silently drifts out of a copied list and is only caught by a red CI after you
-push. `run_ci_mirror.sh` reads the workflow, so it stays exact.
+That short list is a convenience, not a gate: if it misses something, CI catches it before the
+merge. Copy flags from the workflow, not from memory — several gates exit 0 without `--strict`.
+
+To reproduce the whole CI job locally, for instance to debug a failure the log does not explain,
+run the mirror. It parses the step list from validate.yml itself, flags included, so it cannot
+drift from a hand-copied subset (`--list` shows the gates, `--only SUBSTR` runs one, `--fail-fast`
+stops at the first failure). Expect 15–40 minutes on a laptop.
+
+```bash
+scripts/run_ci_mirror.sh
+```
 
 Deterministic work additionally ships a self-contained `<feature>_challenge/`
 directory — a positive case, a negative control, and a `verify.sh` — so it can be
@@ -127,9 +135,9 @@ bash skills/self-review/scripts/check_reported_p_from_counts_challenge/verify.sh
 ```
 
 New deterministic scripts are expected to add one. Coverage of what already exists
-is **partial, and deliberately stated rather than implied**: 51 challenge directories
-exist against 90 detectors, and they are named after the feature under test — which
-is not always one script — so 31 detectors have a directory bearing their own name.
+is **partial, and deliberately stated rather than implied**: 55 challenge directories
+exist against 91 detectors, and they are named after the feature under test — which
+is not always one script — so 32 detectors have a directory bearing their own name.
 A pull request that adds a challenge directory for a detector that lacks one is a
 welcome contribution on its own. To see which those are:
 
@@ -139,6 +147,14 @@ for d in skills/*/scripts/{check_,detect_,derive_,verify_refs}*.py; do
   find skills -type d -name "${s}_challenge" | grep -q . || echo "$s"
 done
 ```
+
+A new detector reports its result by the shared convention in
+[`docs/detector-conventions.md`](docs/detector-conventions.md), so that a check that could not
+run never reads as a clean one. CI (`scripts/check_detector_envelopes.py`) enforces the part that
+can be read from source: the `"detector"` key, and `summary.verdict` in `OK` / `MAJOR_CANDIDATE` /
+`NOT_ASSESSED`, with existing exceptions grandfathered by name. The summary counts, final-line
+wording and exit codes there are the target for new or modified detectors; many existing ones
+still differ.
 
 A green run of `.github/workflows/validate.yml` is required before any release is
 cut.
@@ -240,7 +256,7 @@ justified**. Permitted categories:
   Korean-PDF rendering references, Korean PII-detection patterns.
 - **Locale-jurisdiction modes** — e.g. `grant-builder`'s "Korean Government Grant Mode", where the
   prose is English but real Korean program/artifact terms are preserved.
-- **Bilingual `triggers:`** — additive recognition aliases in SKILL.md frontmatter.
+- **Bilingual `triggers:`** — additive recognition aliases in SKILL.md frontmatter (`metadata.triggers`).
 - **Opt-in `*_ko` variants** — a Korean sibling of an English-default file.
 
 Every file containing non-English text must appear in
@@ -270,14 +286,14 @@ For JOSS readiness, contributions should strengthen open-source practice signals
 
 ## Releasing (maintainers)
 
-Before tagging, run the full local CI mirror and regenerate the distribution manifest.
+Before tagging, regenerate the distribution manifest and confirm CI passed on the exact commit you tag.
 The release workflow builds the selected tag, compares the actual ZIP/npm payloads to that
 checkout and runs the existing privacy scanners on the packaged bytes. npm publication uses
 the verified `.tgz`; do not replace it with a fresh directory-based `npm publish`.
 After upload, downloaded ZIP bytes and npm file contents/executable modes must match the
 verified artifacts. Inspect the `release-verification-vX.Y.Z` workflow artifact for hashes and
-coverage; absence of a successful report is not a pass. npm requires `NPM_TOKEN`, and skipped
-npm steps leave that channel unverified. See [SECURITY.md](SECURITY.md#release-integrity--revocation)
+coverage; absence of a successful report is not a pass. npm is published through trusted
+publishing (no stored token), and skipped npm steps leave that channel unverified. See [SECURITY.md](SECURITY.md#release-integrity--revocation)
 for inspection limits and recovery behavior.
 
 **A release is an event, not a commit.** Merge to `main` continuously — that is what `main` is for —
@@ -285,13 +301,21 @@ and let the work accumulate into something a person would actually want to read 
 
 The rule is enforced by `scripts/check_release_cadence.py` (CI):
 
-- **At least 14 days since the last release.**
+- **No minimum gap is enforced.** The 14-day wait was removed in 6.1.0; `--min-days N` restores
+  one, and the hotfix and pinned-reference notes below then waive it.
 - **The release must carry something a user would notice.** Docs, CI and internal changes are fine
   to merge and a poor reason to make a hundred people update; they ride along with the next release
   that has a reason of its own.
 - **Exception — a hotfix.** Something already shipped is broken: it will not install, it loses data,
   it is a security problem, or it produced a wrong result that a user may have believed. Those go out
   immediately. Say so, and the gate stands aside:
+
+  ```markdown
+  ## [5.20.1] - 2026-07-11
+
+  **Hotfix:** `/orchestrate --e2e` halted at step 3 requiring a DOCX only rendered at step 7,
+  so an end-to-end run could not complete.
+  ```
 
 - **Exception — a pinned reference.** An external artifact has to cite an exact version: a paper
   reporting a measurement taken against this toolkit, for instance. A git SHA is a worse coordinate
@@ -302,13 +326,6 @@ The rule is enforced by `scripts/check_release_cadence.py` (CI):
 
   ```markdown
   **Pinned reference:** the held-out validation study must report the exact version it measured.
-  ```
-
-  ```markdown
-  ## [5.20.1] - 2026-07-11
-
-  **Hotfix:** `/orchestrate --e2e` halted at step 3 requiring a DOCX only rendered at step 7,
-  so an end-to-end run could not complete.
   ```
 
 ### Why this is a gate and not a preference

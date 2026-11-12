@@ -2,9 +2,9 @@
 
 # self-review
 
-> Pre-submission self-review for the user's own manuscripts, applying a reviewer perspective. Systematic check across 10 categories with research-type branching. Outputs Anticipated Major/Minor Comments with severity framing and optional R0 numbering for /revise pipeline integration.
+> Use when checking your own manuscript before submission from a reviewer's perspective. Returns anticipated Major/Minor comments with fixes, including numerical, citation and leakage checks, with an optional multi-reviewer panel. Someone else's paper is /peer-review.
 
-**Invoke:** `/self-review` · **Tools:** Read, Write, Edit, Bash, Grep, Glob · **Model:** inherit
+**Invoke:** `/self-review`
 
 ## When to use
 
@@ -42,6 +42,11 @@
 - `bash scripts/check_table_percentages_challenge/verify.sh  # deterministic, network-free`
 - `bash scripts/check_nested_group_comparison_challenge/verify.sh  # subset-vs-parent P-value comparison`
 - `bash scripts/check_reported_p_from_counts_challenge/verify.sh  # recompute row P from 2x2 counts`
+- `python3 scripts/check_reported_p_from_counts.py --manuscript manuscript.md --tests p_tests.json --strict  # declared tests: alpha-crossing check`
+- `bash tests/test_p_tests_declared.sh  # --tests: declared test per row, alpha crossing at printed precision`
+- `bash scripts/check_test_statistic_p_challenge/verify.sh  # recompute P from t / F / chi2 / z and df`
+- `bash tests/test_test_statistic_p.sh  # statistic and P rounding intervals, sidedness, declared GRIM`
+- `bash tests/test_evalues_declared.sh  # --evalues: declared E-values recomputed over printed precision`
 - `bash scripts/check_dta_denominators_challenge/verify.sh  # sens/spec denominators vs reference-standard counts`
 - `bash scripts/check_paired_difference_estimator_challenge/verify.sh  # median parity / degenerate CI / unnamed estimator`
 - `bash scripts/check_effect_stability_challenge/verify.sh  # CI upper/lower ratio > 10x + events-per-variable < 10`
@@ -50,6 +55,8 @@
 - `bash scripts/refinement_stop_challenge/verify.sh  # terminal-state loop controller: zero-edit PASS / stop signal from qc/*.json`
 - `bash scripts/check_baseline_drift_challenge/verify.sh  # framing drift (strength/significance/scope/hedge) vs the last human-approved baseline`
 - `bash scripts/refinement_regression_challenge/verify.sh  # regression axis: fixed vs broke across runs (ledger); Mirror-Loop churn`
+- `bash scripts/check_review_coverage_challenge/verify.sh  # coverage ledger: PASS over a not_assessed category / probe is Major; legacy JSON without a ledger is Minor`
+- `bash tests/test_review_coverage.sh  # coverage-ledger input validation (exit 2 names the field), BOM, legacy --strict`
 - `bash scripts/check_perspective_structure_challenge/verify.sh  # IMRAD headings + flat abstract in a Perspective (genre-gated, Minor)`
 - `feed R0-numbered output into /revise`
 
@@ -60,7 +67,9 @@
 **References** (`skills/self-review/references/`):
 
 - `domain-probes/` (23 files)
+- `evalues_schema.md`
 - `exemplar_findings/` (8 files)
+- `p_tests_schema.md`
 - `panel_review_template.md`
 - `phases/` (11 files)
 
@@ -104,20 +113,29 @@
 - `check_reference_adequacy.py`
 - `check_reported_p_from_counts.py`
 - `check_reported_p_from_counts_challenge/` (6 files)
+- `check_review_coverage.py`
+- `check_review_coverage_challenge/` (10 files)
 - `check_reviewer_team_consistency.py`
 - `check_rhetorical_density.py`
 - `check_rounded_delta.py`
 - `check_scope_coherence.py`
 - `check_supplement_hygiene.py`
 - `check_table_percentages.py`
-- `check_table_percentages_challenge/` (6 files)
+- `check_table_percentages_challenge/` (14 files)
+- `check_test_statistic_p.py`
+- `check_test_statistic_p_challenge/` (6 files)
 - `cohort_arith_binding_challenge/` (4 files)
 - `confounding_findings_challenge/` (4 files)
 - `disclosure_placement_challenge/` (3 files)
 - `refinement_regression.py`
 - `refinement_regression_challenge/` (20 files)
 - `refinement_stop.py`
-- `refinement_stop_challenge/` (21 files)
+- `refinement_stop_challenge/` (28 files)
+
+**Templates** (`skills/self-review/templates/`):
+
+- `evalues.json`
+- `p_tests.json`
 
 ## Source
 

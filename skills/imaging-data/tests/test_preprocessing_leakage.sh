@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# Regression test for the preprocessing-leakage gate (imaging-data).
+# Synthetic, PII-free JSON manifests reproduce each verdict class. Stdlib-only (python3).
+set -u
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT="$HERE/../scripts/check_preprocessing_leakage.py"
+CH="$HERE/../scripts/check_preprocessing_leakage_challenge"
+TMP="$(mktemp -d -t preproc_XXXX)"
+OUT="$TMP/out.json"
+trap 'rm -rf "$TMP"' EXIT
+
+fail=0
+check() { local label="$1"; shift
+    if "$@" >/dev/null 2>&1; then printf '  PASS  %s\n' "$label"
+    else printf '  FAIL  %s\n' "$label"; fail=$((fail+1)); fi
+}
+has_verdict() { python3 -c "
+import json,sys
+d=json.load(open('$OUT'))
+assert any(c['verdict']=='$1' for c in d['claims']), '$1 not found'
+"; }
+no_verdict() { python3 -c "
+import json,sys
+d=json.load(open('$OUT'))
+assert not any(c['verdict']=='$1' for c in d['claims']), '$1 unexpectedly present'
+"; }
+
+[[ -f "$SCRIPT" ]] || { echo "ENV-ERR: script missing" >&2; exit 2; }
+
+# (1) leak fixture -> 3 Major verdicts + exit 1
+python3 "$SCRIPT" --manifest "$CH/fixture/manifest_leak.json" --out "$OUT" --strict --quiet >/dev/null 2>&1
+check "exit 1 (leak manifest)" test "$?" -eq 1
+check "PREPROCESS_BEFORE_SPLIT detected" has_verdict PREPROCESS_BEFORE_SPLIT
+check "NORMALIZATION_LEAKAGE detected" has_verdict NORMALIZATION_LEAKAGE
+check "PATIENT_CROSS_SPLIT detected" has_verdict PATIENT_CROSS_SPLIT
+check "AUGMENTATION_ON_EVAL detected" has_verdict AUGMENTATION_ON_EVAL
+
+# (2) clean fixture -> exit 0, no Major
+python3 "$SCRIPT" --manifest "$CH/fixture/manifest_clean.json" --strict --quiet >/dev/null 2>&1
+check "exit 0 (clean manifest)" test "$?" -eq 0
+
+# (3) data-fitted transform after split with NO fit_scope -> Minor UNSPECIFIED_FIT_SCOPE, exit 0
+cat > "$TMP/unspec.json" <<'EOF'
+{"split_seed": 1,
+ "transforms": [{"name": "scaler", "type": "minmax", "stage": "after_split"}],
+ "split_assignment": [{"patient_id": "A", "split": "train"}, {"patient_id": "B", "split": "test"}]}
+EOF
+python3 "$SCRIPT" --manifest "$TMP/unspec.json" --out "$OUT" --quiet >/dev/null 2>&1
+check "UNSPECIFIED_FIT_SCOPE detected" has_verdict UNSPECIFIED_FIT_SCOPE
+python3 "$SCRIPT" --manifest "$TMP/unspec.json" --strict --quiet >/dev/null 2>&1
+check "unspecified-scope is Minor (exit 0 under --strict)" test "$?" -eq 0
+
+# (4) split present but no split_seed -> Minor MISSING_SEED
+cat > "$TMP/noseed.json" <<'EOF'
+{"transforms": [{"name": "z", "type": "standardize", "fit_scope": "train", "stage": "after_split"}],
+ "split_assignment": [{"patient_id": "A", "split": "train"}, {"patient_id": "B", "split": "test"}]}
+EOF
+python3 "$SCRIPT" --manifest "$TMP/noseed.json" --out "$OUT" --quiet >/dev/null 2>&1
+check "MISSING_SEED detected" has_verdict MISSING_SEED
+
+# (5) per-image normalisation BEFORE split -> NOT a leak (sample scope is leakage-free)
+cat > "$TMP/persample.json" <<'EOF'
+{"split_seed": 3,
+ "transforms": [{"name": "perimg", "type": "normalization", "fit_scope": "sample", "stage": "before_split"}],
+ "split_assignment": [{"patient_id": "A", "split": "train"}, {"patient_id": "B", "split": "test"}]}
+EOF
+python3 "$SCRIPT" --manifest "$TMP/persample.json" --out "$OUT" --quiet >/dev/null 2>&1
+check "per-image transform before split does NOT fire PREPROCESS_BEFORE_SPLIT" no_verdict PREPROCESS_BEFORE_SPLIT
+python3 "$SCRIPT" --manifest "$TMP/persample.json" --strict --quiet >/dev/null 2>&1
+check "exit 0 on per-image-safe manifest" test "$?" -eq 0
+
+# (6) resampling. A target spacing chosen in advance is fixed and never leaks; a target
+# derived from the cohort (nnU-Net takes a percentile of the dataset fingerprint) is a
+# fitted parameter, and fitting it over every case carries held-out geometry into the
+# training grid exactly as an intensity statistic would.
+cat > "$TMP/resample_fitted.json" <<'EOF'
+{"split_seed": 42,
+ "transforms": [{"name": "resample_to_fingerprint_median", "type": "resample",
+                 "fit_scope": "all", "stage": "before_split"}],
+ "split_assignment": [{"patient_id": "A", "split": "train"}, {"patient_id": "B", "split": "test"}]}
+EOF
+python3 "$SCRIPT" --manifest "$TMP/resample_fitted.json" --out "$OUT" --quiet >/dev/null 2>&1
+check "data-derived resample target before split fires PREPROCESS_BEFORE_SPLIT" \
+      has_verdict PREPROCESS_BEFORE_SPLIT
+
+cat > "$TMP/resample_fixed.json" <<'EOF'
+{"split_seed": 42,
+ "transforms": [{"name": "resample_to_1mm_iso", "type": "resample",
+                 "fit_scope": "fixed", "stage": "before_split"}],
+ "split_assignment": [{"patient_id": "A", "split": "train"}, {"patient_id": "B", "split": "test"}]}
+EOF
+python3 "$SCRIPT" --manifest "$TMP/resample_fixed.json" --out "$OUT" --quiet >/dev/null 2>&1
+check "resample to a declared fixed spacing does NOT fire PREPROCESS_BEFORE_SPLIT" \
+      no_verdict PREPROCESS_BEFORE_SPLIT
+python3 "$SCRIPT" --manifest "$TMP/resample_fixed.json" --strict --quiet >/dev/null 2>&1
+check "exit 0 on fixed-spacing resample" test "$?" -eq 0
+
+# (7) a manifest that gives the gate nothing to check is an input error, never "leakage-safe".
+# An empty manifest used to print "OK: preprocessing manifest is leakage-safe." and exit 0
+# under --strict; split rows without a patient_id were skipped the same way.
+echo '{}' > "$TMP/empty.json"
+python3 "$SCRIPT" --manifest "$TMP/empty.json" --strict > "$TMP/empty.out" 2>&1
+check "empty manifest: exit 2 under --strict" test "$?" -eq 2
+check "empty manifest: no leakage-safe claim" bash -c "! grep -q 'leakage-safe' '$TMP/empty.out'"
+cat > "$TMP/nopid.json" <<'EOF'
+{"split_seed": 5,
+ "split_assignment": [{"unit_id": "u1", "split": "train"}, {"unit_id": "u2", "split": "test"}]}
+EOF
+python3 "$SCRIPT" --manifest "$TMP/nopid.json" --strict > "$TMP/nopid.out" 2>&1
+check "split rows without a patient_id: exit 2" test "$?" -eq 2
+check "split rows without a patient_id: no leakage-safe claim" bash -c "! grep -q 'leakage-safe' '$TMP/nopid.out'"
+for bad in '[{}]' '["normalize"]' '[{"type": [], "fit_scope": "all", "stage": "before_split"}]' '[{"type": false}]'; do
+    printf '{"split_seed": 5, "transforms": %s, "split_assignment": [{"patient_id": "A", "split": "train"}]}\n' "$bad" > "$TMP/untyped.json"
+    python3 "$SCRIPT" --manifest "$TMP/untyped.json" --strict >/dev/null 2>&1
+    check "transform without a type ($bad): exit 2" test "$?" -eq 2
+done
+printf '{"split_seed": 5, "split_assignment": [{"patient_id": " ", "split": "train"}, {"patient_id": "B", "split": "test"}]}\n' > "$TMP/blankpid.json"
+python3 "$SCRIPT" --manifest "$TMP/blankpid.json" --strict >/dev/null 2>&1
+check "blank patient_id: exit 2" test "$?" -eq 2
+# A numeric patient_id 0 is an ID: it was dropped as falsy, so its cross-split went unseen.
+cat > "$TMP/zero.json" <<'EOF'
+{"split_seed": 5,
+ "split_assignment": [{"patient_id": 0, "split": "train"}, {"patient_id": 0, "split": "test"}]}
+EOF
+python3 "$SCRIPT" --manifest "$TMP/zero.json" --out "$OUT" --quiet >/dev/null 2>&1
+check "patient_id 0 in two splits fires PATIENT_CROSS_SPLIT" has_verdict PATIENT_CROSS_SPLIT
+# Transforms only: the transforms were checked, the patients were not, and the output says so.
+cat > "$TMP/transforms_only.json" <<'EOF'
+{"transforms": [{"name": "z", "type": "standardize", "fit_scope": "train", "stage": "after_split"}]}
+EOF
+python3 "$SCRIPT" --manifest "$TMP/transforms_only.json" --strict > "$TMP/tonly.out" 2>&1
+check "transforms only: exit 0 (nothing found in what was checked)" test "$?" -eq 0
+check "transforms only: says patient overlap was not checked" grep -q 'not checked' "$TMP/tonly.out"
+check "transforms only: no leakage-safe claim" bash -c "! grep -q 'leakage-safe' '$TMP/tonly.out'"
+
+# (7b) a data-fitted transform whose type is outside the internal vocabulary. Library class
+# names (TorchIO HistogramStandardization, MONAI NormalizeIntensityd, ...) used to be read
+# as "not data-fitted" whatever their fit_scope, so a fit on `all` before the split printed
+# "leakage-safe" under --strict. The manifest's own fit_scope now decides.
+leak_typed() {  # $1=out  $2=type  $3=fit_scope  $4=stage
+  printf '{"split_seed": 1, "transforms": [{"name": "t", "type": "%s", "fit_scope": "%s", "stage": "%s"}], "split_assignment": [{"patient_id": "A", "split": "train"}, {"patient_id": "B", "split": "test"}]}\n' "$2" "$3" "$4" > "$1"
+}
+for typ in histogram_standardization HistogramStandardization NormalizeIntensityd \
+           ScaleIntensityRangePercentilesd intensity_standardization; do
+  leak_typed "$TMP/lt.json" "$typ" all before_split
+  python3 "$SCRIPT" --manifest "$TMP/lt.json" --out "$OUT" --strict --quiet >/dev/null 2>&1
+  check "$typ fit on all before split: exit 1 under --strict" test "$?" -eq 1
+  check "$typ fit on all before split: PREPROCESS_BEFORE_SPLIT" has_verdict PREPROCESS_BEFORE_SPLIT
+  leak_typed "$TMP/lt.json" "$typ" all after_split
+  python3 "$SCRIPT" --manifest "$TMP/lt.json" --out "$OUT" --quiet >/dev/null 2>&1
+  check "$typ fit on all after split: NORMALIZATION_LEAKAGE" has_verdict NORMALIZATION_LEAKAGE
+done
+# controls: the same types fit on train, or per image, stay clean
+no_claims() { python3 -c "
+import json; assert not json.load(open('$OUT'))['claims']"; }
+for typ in HistogramStandardization NormalizeIntensityd; do
+  leak_typed "$TMP/lt.json" "$typ" train after_split
+  python3 "$SCRIPT" --manifest "$TMP/lt.json" --out "$OUT" --strict --quiet >/dev/null 2>&1
+  check "$typ fit on train after split: exit 0" test "$?" -eq 0
+  check "$typ fit on train after split: no claims" no_claims
+  leak_typed "$TMP/lt.json" "$typ" per_image before_split
+  python3 "$SCRIPT" --manifest "$TMP/lt.json" --out "$OUT" --strict --quiet >/dev/null 2>&1
+  check "$typ per-image before split: exit 0" test "$?" -eq 0
+  check "$typ per-image before split: no claims" no_claims
+done
+# an unknown type with fit_scope none is still not presumed fitted (crop, pad, ...)
+leak_typed "$TMP/lt.json" crop_foreground none before_split
+python3 "$SCRIPT" --manifest "$TMP/lt.json" --out "$OUT" --strict --quiet >/dev/null 2>&1
+check "crop with fit_scope none before split: exit 0" test "$?" -eq 0
+check "crop with fit_scope none before split: no claims" no_claims
+
+# (8) the shipped challenge card passes
+check "challenge verify.sh passes" bash "$CH/verify.sh"
+
+echo "fail=$fail"; [[ "$fail" -eq 0 ]] && echo "ALL PASS" || echo "FAILURES: $fail"
+exit "$fail"

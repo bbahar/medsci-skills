@@ -34,7 +34,68 @@ The finding it produced was quarantined and not acted on, and the corpus in plac
 so nothing measurable was lost. The next corpus is the one that reading destroys, and this file
 exists because the fence was in a prompt instead of in the repository.
 
+## Merging your own pull requests
+
+The maintainer has authorized Claude to merge a pull request it opened, **without asking**, when all
+of these hold: CI is green on the current head, there is no merge conflict, no review thread is open,
+and the change is one of:
+
+- a CI, test or tooling fix (workflows, `scripts/`, `tests/`, challenge-card `verify.sh` plumbing);
+- a correction of a stated count, link or other fact in documentation;
+- bookkeeping (distribution manifest, generated docs and catalogs, CHANGELOG entries);
+- a refactor that changes no output a user sees.
+
+Squash-merge, then say what was merged. **Ask first** for anything else, and always for:
+
+- a change to what a detector flags or clears, or to its message — that is what a user is told about
+  their manuscript;
+- a change to a medical or research claim, or to a reporting checklist (`MAINTAINERS.md` requires
+  founder review);
+- a release, a version bump or a tag;
+- anything touching `_corpus/`.
+
+When a pull request mixes the two, it is the second kind.
+
+## Working from a cloud session
+
+A cloud session sees this repository and nothing else. The maintainer's own Claude rules, skills
+and memory are on their machine, and so are their manuscript and project folders. Five of those
+local rules matter here, so they are restated.
+
+**Talk to the maintainer in Korean.** What lands in the repository stays in English: code,
+comments, commit messages and pull-request text (`CONTRIBUTING.md` → *Language Policy*).
+
+**Scan what CI does not.** `validate_skills.sh` scans files. A commit message and a pull-request
+body are stored separately, stay public, and nothing checks them. Before `git commit`, and before
+`gh pr create` or `gh pr edit`, write the text to a file and run:
+
+```bash
+python3 scripts/check_precedent.py pr_body.md   # exit 0 = clean, 3 = hit
+```
+
+The blocklist is hash-only on purpose. Never write an identifier itself into this repository, not
+in a gate, a comment, or a sentence saying it is absent. To report that something is clean, name
+the class ("no manuscript IDs"), not the value.
+
+**Stop and ask before building a new wall.** Before adding a gate, detector, CI check or skill,
+changing direction (positioning, target, distribution channel), or touching three or more gates
+or skills in one batch, stop and brief the maintainer in plain Korean: what it costs, what it could
+hide, and which real failure it answers. Bug fixes, corrections of a typo or a stated fact, and
+mechanical steps of a plan the maintainer already approved go ahead without this.
+
+**Review the final diff blind.** Before a pull request is merged, hand its final diff to a reviewer
+that did not write it: a different model family if one is available, otherwise a fresh agent, and
+then say that the review is not independent. Give it the diff, one line of intent per change, and
+the paths it must not open (`_corpus/`). Do not give it your checklist, earlier findings or a note
+that something was fixed. A review steered by a checklist finds what the checklist names; on
+2026-10-05 a blind pass found two defects that a checklist-guided review had passed. Fix what it
+finds, and say in the pull request how many rounds ran.
+
+**Do not reconstruct missing local context.** If a task depends on a manuscript, a project folder,
+a reviewer's comment or anything else that is not in this repository, say that it is missing and
+ask. Do not infer it from file names or commit history.
+
 ## Everything else
 
-`CONTRIBUTING.md` is the entry point: how to run the gate mirror before pushing, the worktree
-discipline, and what a change is expected to ship with.
+`CONTRIBUTING.md` is the entry point: what to run before pushing (CI is the merge gate), the
+worktree discipline, and what a change is expected to ship with.

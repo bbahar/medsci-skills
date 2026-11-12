@@ -1,9 +1,9 @@
 # Phase 2.5d — Cross-Reference QC (Manuscript ↔ rendered DOCX)
 
 Load-on-demand companion to `/self-review` Phase 2.5d. SKILL.md keeps the two gates,
-the severity policy table, and the no-auto-fix rule; this file carries the precedent
-failure, the input-location procedure, the reconciliation-block template, and the
-comment-emission convention.
+a severity summary, and the no-auto-fix rule; this file carries the full severity policy
+table, the precedent failure, the input-location procedure, the reconciliation-block
+template, and the comment-emission convention.
 
 Read it when a rendered DOCX exists and the xref gate has fired.
 
@@ -47,7 +47,7 @@ DOCX build has occurred yet (early drafts).
 2. **Invoke the shared script** (lives in `/manage-refs`):
 
    ```bash
-   python3 "${MEDSCI_SKILLS_ROOT:-$HOME/workspace/medsci-skills}/skills/manage-refs/scripts/check_xref.py" \
+   python3 "${CLAUDE_SKILL_DIR}/../manage-refs/scripts/check_xref.py" \
      --md manuscript/manuscript.md \
      --docx manuscript/manuscript_final.docx \
      --out qc/xref_audit.json \

@@ -2,9 +2,9 @@
 
 # peer-review
 
-> Peer review assistant for medical journals. Generates structured review drafts with journal-specific formatting. Constructive developmental tone with systematic manuscript analysis.
+> Use when reviewing someone else's manuscript for a journal, such as after a review invitation or for a revised R1/R2 version. Drafts a structured, constructive review in the journal's format. Never for your own manuscript; that is /self-review.
 
-**Invoke:** `/peer-review` · **Tools:** Read, Write, Edit, Bash, Grep, Glob · **Model:** inherit
+**Invoke:** `/peer-review`
 
 ## When to use
 
@@ -23,7 +23,7 @@
 
 - A review is one reviewer's judgement, not an editorial decision.
 - No standalone demo; quality depends on the manuscript supplied.
-- The injection scan catches formatting-hidden text (colour/size/position/render-mode/metadata) deterministically; a phrase in visible prose is flagged for a human, not auto-removed.
+- The injection scan flags text hidden by colour against the background under the span, size, position, render mode, zero opacity (partial opacity counts as drawn), metadata, or an opaque shape drawn over it (the page render shows too few of its glyphs). The local background is used only where the span's box has one flat colour; over an image or gradient the page background is used, and text covered by an image, a gradient or a shape in the text's own colour still reads as drawn. A phrase in visible prose is flagged for a human, not auto-removed.
 
 **Validation**
 
@@ -40,7 +40,7 @@
 
 - `aczel_2021_reviewer2_patterns.md`
 - `domain-probes/` (23 files)
-- `exemplar_reviews/` (7 files)
+- `exemplar_reviews/` (8 files)
 - `narrative_review_audit.md`
 - `review_draft_template.md`
 - `reviewer_calibration/` (3 files)
@@ -49,7 +49,7 @@
 **Scripts** (`skills/peer-review/scripts/`):
 
 - `check_pdf_injection.py`
-- `check_pdf_injection_challenge/` (6 files)
+- `check_pdf_injection_challenge/` (20 files)
 - `check_review_boxes.py`
 - `check_review_length.py`
 - `check_review_request_types.py`

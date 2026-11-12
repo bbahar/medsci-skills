@@ -2,16 +2,27 @@
 # Self-test for the citekey-provenance challenge card.
 #
 # A card that passes proves it RAN. It proves nothing about whether it would catch a
-# defect. So: mutate the detector five ways, each removing a behaviour the card claims to
-# assert, and require the card to FAIL every time. If any mutation slips through green,
+# defect. So: mutate the detector several ways, each removing a behaviour the card claims
+# to assert, and require the card to FAIL every time. If any mutation slips through green,
 # the card is blind on that axis and this exits 1.
 #
-# The five mutations are the mistakes this detector is actually exposed to:
+# The mutations are the mistakes this detector is actually exposed to:
 #   1. --strict fails on UNRESOLVED too      (a paper never added != a composed citekey)
 #   2. the empty-library guard is dropped    (an empty .bib condemns every note, saying nothing)
 #   3. the notetype filter is dropped        (concept notes get judged as literature notes)
 #   4. the DOI suggestion is disabled        (INVENTED silently degrades to UNRESOLVED)
 #   5. the filename check is dropped         (a note whose filename disagrees reads as OK)
+#   6. the duplicate-key check is dropped    (a key on two papers reads as OK)
+#   7. the URL/slash key check is dropped    (a key that cannot be a filename reads as OK)
+#   8. NO_IDENTIFIER folds into UNRESOLVED   (a note with no DOI is called "never added")
+#   9. the PMID lookup is dropped            (a DOI-less note cannot find its real key)
+#  10. an ambiguous key is still suggested   (the rename that merges two papers' notes)
+#  11. the DOI/key mismatch check is dropped (a real key on the wrong paper reads as OK)
+#  12. hidden folders judged on the full path (a vault under ../ or a dot-folder: 0 notes)
+#  13. the BOM is not stripped               (a BOM-prefixed note is silently skipped)
+#  14. frontmatter is truncated              (a long frontmatter note is silently skipped)
+#  15. unclosed literature frontmatter skipped (its key is never checked)
+#  16. a zero-note scan passes --strict      (a check that never ran reads as clean)
 set -uo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -31,8 +42,33 @@ src = pathlib.Path(src_path).read_text(encoding="utf-8")
 
 MUTATIONS = {
     "--strict fires on UNRESOLVED too": (
-        'if args.strict and counts["INVENTED"]:',
-        'if args.strict and (counts["INVENTED"] or counts["UNRESOLVED"]):',
+        'if args.strict and (counts["INVENTED"] or counts["MISMATCH"] or counts["UNPARSED"]):',
+        'if args.strict and (counts["INVENTED"] or counts["MISMATCH"] or counts["UNPARSED"]'
+        ' or counts["UNRESOLVED"]):',
+    ),
+    "DOI/key mismatch check removed": (
+        "        elif (citekey in keys and doi_key and doi_key != citekey\n",
+        "        elif (False and doi_key and doi_key != citekey\n",
+    ),
+    "hidden test applied to the full path": (
+        "if any(part.startswith(\".\") for part in rel_parts):",
+        "if any(part.startswith(\".\") for part in path.parts):",
+    ),
+    "BOM not stripped": (
+        'text = path.read_text(encoding="utf-8-sig", errors="ignore")',
+        'text = path.read_text(encoding="utf-8", errors="ignore")',
+    ),
+    "frontmatter truncated again": (
+        'text = text.replace("\\r\\n", "\\n")',
+        'text = text.replace("\\r\\n", "\\n")[:4000]',
+    ),
+    "unclosed literature frontmatter skipped": (
+        "                yield path, None\n",
+        "                pass\n",
+    ),
+    "zero-note scan passes --strict": (
+        "        if args.strict:\n            return 2\n",
+        "        if False:\n            return 2\n",
     ),
     "empty-library guard removed": (
         "        return 2\n\n    rows = []",
@@ -43,12 +79,32 @@ MUTATIONS = {
         "if False:\n            continue",
     ),
     "DOI suggestion disabled": (
-        'suggestion = doi_to_key.get(doi, "") if doi else ""',
-        'suggestion = ""',
+        'doi_key = doi_to_key.get(doi, "") if doi else ""',
+        'doi_key = ""',
     ),
     "filename check removed": (
         'verdict = "OK" if path.stem == citekey else "FILENAME"',
         'verdict = "OK"',
+    ),
+    "duplicate-key check removed": (
+        "elif citekey in ambiguous:",
+        "elif False:",
+    ),
+    "URL/slash key check removed": (
+        "elif unusable(citekey):",
+        "elif False:",
+    ),
+    "NO_IDENTIFIER folded into UNRESOLVED": (
+        "elif doi or pmid:",
+        "elif True:",
+    ),
+    "PMID lookup removed": (
+        'suggestion = pmid_to_key.get(pmid, "")',
+        'suggestion = ""',
+    ),
+    "ambiguous key still suggested": (
+        "if suggestion in ambiguous or unusable(suggestion):",
+        "if False:",
     ),
 }
 

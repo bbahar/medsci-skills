@@ -101,8 +101,10 @@ counterexample: the O-ring failure data was buried in small type on a crowded sl
 
 ### 5. Native objects, not images
 
-Charts, tables, and diagrams must be **editable native PowerPoint objects**, not exported
-images. This is non-negotiable in academic medicine because:
+Tables must be **editable native PowerPoint objects**, not exported images; charts and diagrams
+are drawn as code and inserted, with the drawing script kept beside the deck as the editable source
+(`ai_slide_tells.md` overrules this file where they conflict). This is non-negotiable in academic
+medicine because:
 
 - Co-authors edit numbers in revision rounds.
 - Mac PowerPoint renders TIFF/SVG inconsistently (see `pptx-mac-compatibility` rule).
@@ -110,9 +112,9 @@ images. This is non-negotiable in academic medicine because:
   rasterized charts pixelate.
 
 Specifically:
-- Excel-linked charts → double-click opens the data table.
+- Charts → matplotlib / R, inserted as PNG ≥ 300 dpi; never hand-placed shapes.
 - Tables → native PowerPoint tables, not screenshots.
-- Flow diagrams → grouped shapes, not a `make-figures` PNG export embedded as image.
+- Flow diagrams → matplotlib / Graphviz, inserted as PNG; never assembled from autoshapes.
 - Single fonts (Pretendard / Apple SD Gothic Neo for Korean decks; Helvetica/Calibri for
   English-only) — declared once at the deck level, not per-slide.
 
@@ -163,7 +165,7 @@ These compose with the more granular checks in `critic_rubrics/slide.md`:
 - **Logo-tax** — institutional logos on every slide masking content. Fix: title slide and
   closing slide only; corner-only on intermediate slides if mandated.
 - **AI-image without disclosure** — AI-generated illustration on a slide destined for a
-  journal that prohibits AI imagery. Fix: see `journal-ai-image-policies` rule before
+  journal that prohibits AI imagery. Fix: see `make-figures/SKILL.md` → *Journal AI-Image Policies* before
   building visual abstract / Central Illustration.
 
 ---
@@ -177,7 +179,7 @@ Before exporting to PPTX, walk every slide:
 - [ ] Glance test ≤ 3 seconds.
 - [ ] Colors ≤ 3 + 1 accent; carry meaning, not decoration.
 - [ ] Fonts ≤ 2 throughout deck; ≥ 18 pt body for slides; ≥ 24 pt for posters.
-- [ ] Charts/tables are native objects (not images).
+- [ ] Tables are native objects; charts and diagrams drawn as code, not autoshapes.
 - [ ] No 3-D / drop-shadow / gradient unless data-driven.
 - [ ] Direct labels on chart series; legends only when ≥ 4 series.
 - [ ] Same slide works in grayscale (run a `convert -colorspace Gray` test).
@@ -196,7 +198,7 @@ If two or more boxes are unchecked, return to Phase 0 outline before continuing.
 - `make-figures/references/design_principles.md` — figure-level design (this skill is the
   slide-level companion; both share Reynolds/Knaflic/Tufte foundations)
 - `~/.claude/rules/pptx-mac-compatibility.md` — TIFF, sp3d, app.xml, srcRect defects
-- `~/.claude/rules/journal-ai-image-policies.md` — AI-image policy (JACC prohibits, Radiology
+- `make-figures/SKILL.md` → *Journal AI-Image Policies* — AI-image policy (JACC prohibits, Radiology
   allows with disclosure)
 - `~/.claude/rules/manuscript-style-classical.md` — heading style for slides paired with
   manuscript submission

@@ -26,8 +26,7 @@ Scan for and remove AI writing patterns (see AI Pattern Avoidance below). Edit `
 | Trigger | Action |
 |---------|--------|
 | Manuscript type = MA, systematic review, or a senior co-author review is expected | Load `references/section_guides/step7_1_classical_qc.md` → run the 7 grep checks together (§ symbol, AI Disclosure paragraph, heading style, eligibility numbered list, Funding placeholder, PROSPERO chronology, em-dash overuse) |
-| Verify all at once with a deterministic lint | `python3 "${MEDSCI_SKILLS_ROOT:-$HOME/workspace/medsci-skills}/skills/self-review/scripts/check_classical_style.py" --manuscript manuscript/manuscript.md --strict` — `SECTION_SYMBOL`/`INBODY_AI_DISCLOSURE` (Major) + `ELIGIBILITY_PROSE`/`DECIMAL_INCONSISTENCY`/`EM_DASH_OVERUSE` (Minor). The machine-checkable subset of the same conventions as the 7-grep checklist. |
-| Global-rule cross-reference | `~/.claude/rules/manuscript-style-classical.md` (motivation for the 11 items) |
+| Verify all at once with a deterministic lint | `python3 "${CLAUDE_SKILL_DIR}/../self-review/scripts/check_classical_style.py" --manuscript manuscript/manuscript.md --strict` — `SECTION_SYMBOL`/`INBODY_AI_DISCLOSURE` (Major) + `ELIGIBILITY_PROSE`/`DECIMAL_INCONSISTENCY`/`EM_DASH_OVERUSE` (Minor). The machine-checkable subset of the same conventions as the 7-grep checklist. |
 | Pattern 19–21 body rewrite | `/humanize` (§, self-reference, AI Disclosure boilerplate) |
 
 **AI-disclosure meta-applicability (manuscript-style-classical §15):** if the manuscript
@@ -56,7 +55,7 @@ title page (manuscript-style-classical §7 forbids the in-body AI-disclosure par
 
 Call `/check-reporting` on `manuscript/manuscript.md`. Parse the output:
 - If the report includes a JSON summary block (Part D), extract MISSING items.
-- For each MISSING item where `fixable_by_ai` is true (e.g., missing ethics statement, missing data availability statement, missing sample size justification), insert the suggested text at the indicated location in `manuscript/manuscript.md`.
+- For each MISSING item where `fixable_by_ai` is true (e.g., missing ethics statement, missing data availability statement), insert the suggested text at the indicated location in `manuscript/manuscript.md`. Never insert a `suggested_fix` that still contains a bracketed placeholder (`[N]`, `[rationale]`); list it for the author instead. Sample-size justification is never auto-inserted: its rationale, minimum N and target come from the author.
 - Do NOT attempt to fix items requiring external information (IRB numbers, registration numbers, protocol details only the author knows).
 - Log all auto-inserted text to `qc/_pipeline_log.md`.
 
@@ -78,8 +77,8 @@ contract, its sole output is `qc/reference_audit.json` (no longer writes
 `references/*`). Parse that file: if `submission_safe: false`, stop the pipeline
 and surface the `FABRICATED` / `MISMATCH` records AND any `duplicate_findings[]`
 entries (duplicate PMID/DOI; cite renumbering required) to the user. If
-`/verify-refs` is unavailable, fall back to `/search-lit --verify-only` and flag
-any unverified references with `[UNVERIFIED]` markers.
+`/verify-refs` is unavailable, flag every reference not confirmed by DOI/PMID with
+`[UNVERIFIED - NEEDS MANUAL CHECK]` rather than treating it as verified.
 
 #### Steps 7.3a / 7.3b / 7.3c: Integrity audits (numerical / estimand / reference-adequacy)
 
@@ -160,7 +159,7 @@ Log the self-review fix loop results to `qc/_pipeline_log.md`:
 ```
 
 Generate the following files:
-- `manuscript/manuscript.md`: Complete manuscript (with LLM disclosure in Methods and Acknowledgments if enabled)
+- `manuscript/manuscript.md`: Complete manuscript (with the LLM disclosure, if enabled, in the places the target journal's profile asks for — see SKILL.md "LLM Writing Disclosure")
 - `manuscript/title_page.md`: Title page with author info, word count, key points if required. **Number the author affiliations by first appearance** (affiliation 1 = the first author's first affiliation; each new affiliation gets the next integer as the author list is read left to right; each ends with city + country) — required by Nature Portfolio / npj technical checks. Do not hand-number; generate and verify with `scripts/build_title_page_affiliations.py` (`--authors authors.yaml` to build, `--check title_page.md --strict` to verify). See `references/section_guides/title_abstract.md` § "Title Page — Author & Affiliation Order".
 - `qc/reporting_checklist.md`: Filled reporting guideline checklist from Step 7.2
 - `qc/self_review.md`: Final self-review report from Step 7.4
@@ -184,7 +183,7 @@ Build the final submission-ready documents from the assembled components:
 
    The validation + render scripts live in `/manage-refs` (split out 2026-05-01). Either invoke `/manage-refs` directly (recommended), or call the scripts manually:
    ```bash
-   MR="${MEDSCI_SKILLS_ROOT:-$HOME/workspace/medsci-skills}/skills/manage-refs"
+   MR="${CLAUDE_SKILL_DIR}/../manage-refs"
 
    # 1. Validate keys vs .bib first (fail fast on UNDEFINED keys; [@NEW:topic] placeholders pass through)
    python "$MR/scripts/check_citation_keys.py" \
@@ -202,8 +201,7 @@ Build the final submission-ready documents from the assembled components:
    RYAI; use `vancouver` for JVIR (no dedicated CSL). On rejection cascade (e.g., ER → JVIR → CVIR), re-render with
    different `-j` — references reformat in seconds. Never hand-type the References list.
 
-   **Decision: pandoc vs Zotero Word plugin (CWYW)** — `/manage-refs` documents the hybrid 3-phase strategy (Phase 1 pandoc draft → Phase 2 transition → Phase 3 Zotero CWYW for circulation/revision/submission). Use Workflow B (CWYW) once co-authors collaborate live in Word; use Workflow A (pandoc) for single-author lockdown, journal-cascade rejection re-formatting, or when the plugin is unavailable. See
-   `~/.claude/rules/manuscript-references.md` and `skills/manage-refs/SKILL.md`.
+   **Decision: pandoc vs Zotero Word plugin (CWYW)** — `/manage-refs` documents the hybrid 3-phase strategy (Phase 1 pandoc draft → Phase 2 transition → Phase 3 Zotero CWYW for circulation/revision/submission). Use Workflow B (CWYW) once co-authors collaborate live in Word; use Workflow A (pandoc) for single-author lockdown, journal-cascade rejection re-formatting, or when the plugin is unavailable. See `skills/manage-refs/SKILL.md`.
 5. **Fallback** (if pandoc is unavailable): Generate the DOCX using python-docx:
    - Parse `manuscript/manuscript.md` sections (`##` → Heading 2, `###` → Heading 3, `**bold**` → bold runs)
    - Insert figures as inline images at their markdown reference locations
@@ -225,7 +223,7 @@ the DOCX entirely.
 **Run after Step 7.6 DOCX build and before Step 7.7 final gate:**
 
 ```bash
-MR="${MEDSCI_SKILLS_ROOT:-$HOME/workspace/medsci-skills}/skills/manage-refs"
+MR="${CLAUDE_SKILL_DIR}/../manage-refs"
 python3 "$MR/scripts/check_xref.py" \
   --md manuscript/manuscript.md \
   --docx manuscript/manuscript_final.docx \
@@ -236,7 +234,9 @@ python3 "$MR/scripts/check_xref.py" \
 The script extracts (a) every `(Supplementary )?(Table|Figure)\s+(S?\d+[A-Z]?)`
 in-text citation, (b) caption definitions from `## Tables` / `## Figures` /
 `## Figure Legends` / `## Supplementary {Tables,Figures}` sections in the body,
-and (c) caption paragraphs in the rendered DOCX (via python-docx). It then
+or from an embedded figure's own caption (`![Figure N. Caption](path)`, the Phase 2
+embed form) when no legend section defines that figure, and (c) caption paragraphs
+in the rendered DOCX (via python-docx). It then
 emits a 3-way matrix to `qc/xref_audit.json`:
 
 | Status | Meaning | Severity |

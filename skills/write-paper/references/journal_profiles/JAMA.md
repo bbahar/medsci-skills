@@ -34,17 +34,22 @@ Word counts exclude abstract, references, tables, and figure legends.
 ```
 Importance: [Why this question matters — clinical impact, knowledge gap]
 Objective: [Specific aims — 1 sentence]
-Design, Setting, and Participants: [Study design, setting, eligibility criteria,
-    dates of data collection, follow-up duration]
+Design: [Basic design and specific study type, years of the study,
+    follow-up duration]
+Setting: [Study setting, so readers can judge applicability]
+Participants: [Clinical disorders, eligibility criteria, key sociodemographic
+    features; number eligible and how they were selected]
 Intervention(s) [if applicable]: [Description of interventions/exposures]
 Main Outcomes and Measures: [Primary and secondary outcomes defined]
 Results: [Number enrolled/analyzed, demographic summary, primary results
     with effect sizes, CIs, and exact P values]
 Conclusions and Relevance: [Main conclusion — 1-2 sentences answering
     the Objective; clinical relevance]
+Trial Registration: [Clinical trials only — registry name, registration
+    number and URL]
 ```
 
-**Critical**: JAMA's structured abstract has 7 headings (not 4). The "Importance" heading is unique to JAMA and is the first thing editors read.
+**Critical**: Design, Setting and Participants are separate headings at submission; JAMA combines them as "Design, Setting, and Participants" only during editing ("for manuscript submission these sections should be kept separate"). A clinical trial adds Trial Registration ("the name of the trial registry, registration number, and URL of the registry must be included"). This template is for reports of original data; a meta-analysis uses its own list: Importance, Objective, Data Sources, Study Selection, Data Extraction and Synthesis, Main Outcome(s) and Measure(s), Results, Conclusions and Relevance (no Design, Setting, Participants or Intervention/Exposure headings). The "Importance" heading is a JAMA Network heading and is the first thing editors read.
 
 ---
 
@@ -182,7 +187,7 @@ Not appropriate for: small retrospective studies, technical AI methodology witho
 
 ## AI Writing Disclosure Policy
 - **Requirement level:** Required
-- **Permitted scope:** Language editing only — AI/LLM tools may be used for editing, grammar, and language improvement but cannot be listed as authors; AI must not generate scientific content, data analysis, or conclusions; authors bear full responsibility for all content including any AI-assisted text
-- **Disclosure location:** Methods + Cover letter — describe the AI tool name, version, and how it was used in the Methods section; also disclose in the cover letter; ICMJE-compliant disclosure required
-- **AI-generated images:** Discouraged — submission and publication of clinical images created by AI tools is discouraged unless part of formal research design or methods; if used, authors must provide a clear description of the content created and the AI tool name, version, and manufacturer; AI-generated or AI-manipulated images must be disclosed; fabrication/falsification policies apply (JAMA editorial 2024; confirmed Apr 2026)
+- **Permitted scope:** AI may assist with content creation, revision, and formatting if the use is disclosed; authors must review all AI-generated content and take full responsibility for it; AI cannot be an author; AI must not be used to generate or format references; AI may not be used to draft Opinion manuscripts, Letters to the Editor, or Online Comments; submitting AI-created content is discouraged unless it is part of formal research design or methods. Basic grammar and spelling checkers need no disclosure.
+- **Disclosure location:** Acknowledgment section (Methods when AI is part of formal research design or methods) — name the tool, version and extension numbers, manufacturer, date(s) of use, how it was used and on which parts of the manuscript, and confirm that the authors take responsibility for the content
+- **AI-generated images:** Not permitted — clinical images and clinical illustrations created or manipulated by AI are not permitted unless part of formal research design or methods, which must be fully disclosed; the same applies to AI-created video and audio
 - **Policy URL:** https://jamanetwork.com/journals/jama/pages/instructions-for-authors#702720037

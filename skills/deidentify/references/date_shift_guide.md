@@ -11,7 +11,9 @@ could identify individuals.
 
 The recommended approach, used by PCORI Clinical Data Research Networks:
 
-1. **Generate offset**: For each patient, draw a random integer from [-365, +365] days
+1. **Generate offset**: For each patient, draw a random integer from [-365, +365] days,
+   excluding 0 (the script draws 1-365 days and a random direction; a zero offset
+   would leave the original date in place)
 2. **Apply uniformly**: Shift ALL dates for that patient by the same offset
 3. **Truncate edges**: Remove records near dataset boundaries where shifting would
    push dates outside the study period
@@ -24,18 +26,25 @@ The recommended approach, used by PCORI Clinical Data Research Networks:
 
 ## Implementation Details
 
-### Seed Management
+### Offset Generation
 
-- A random seed is generated once per run and stored in `mapping.json`
-- This makes the shifting deterministic and reproducible
-- Re-running with the same seed on the same data produces identical results
-- The seed should be kept as securely as the mapping file itself
+- Each patient's offset is drawn independently from the operating system's
+  cryptographic random source (`secrets.SystemRandom`); there is no run seed
+- An earlier version drew offsets from a seeded PRNG with a small seed space:
+  knowing a few patients' true dates was enough to find the seed and recover
+  every other patient's original dates. Offsets are not derivable from one another now
+- The offsets themselves are stored in `mapping.json`, which is what makes a run
+  reproducible; keep it as securely as the original data
+- Re-running `apply` draws new offsets
 
 ### Entity Identification
 
-The script looks for a patient/entity ID column to group dates:
-1. Columns classified as `id` type (차트번호, MRN, patient_id, etc.)
-2. If no ID column exists, all dates are shifted by the same global offset
+During review, whenever a date column is marked for anonymization, the researcher chooses
+the column that identifies the patient (ID-type columns such as 차트번호, MRN or patient_id
+are marked as candidates), or `row` if every row is a different patient. The script does
+not guess, and never shifts every row by one shared offset: one known original date would
+then reveal all the others. `apply` refuses a report with dates to shift and no patient key,
+and refuses rows whose patient key is empty.
 
 ### Supported Date Formats
 
@@ -45,6 +54,8 @@ The script looks for a patient/entity ID column to group dates:
 | Dot-separated | 2024.03.15 | Yes |
 | Slash-separated | 2024/03/15 | Yes |
 | Compact | 20240315 | Yes |
+| ISO with time | 2024-03-15 14:30:00 | Yes |
+| Excel date cells | (native date/datetime) | Yes — read as ISO text, written back as text |
 | Korean | 2024년 3월 15일 | Yes |
 
 ### Unparseable Dates

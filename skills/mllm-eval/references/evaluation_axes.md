@@ -82,8 +82,9 @@ score.
   distribution, not a fixed value.
 - **Disclose (MI-CLEAR-LLM transparency):** the **exact prompt(s)** including the system prompt,
   the **decoding settings** (temperature / top-p / seed), **≥ 3 runs** with reported variance
-  (e.g., mean ± SD), and a **prompt-robustness** check across **≥ 2 phrasings/formats** for the
-  headline result.
+  (e.g., mean ± SD; ≥ 3 is the floor this skill checks, but ≥ 5 runs give a usable SD: with three
+  runs its 95% CI is about 0.5-6 x the observed SD, with five about 0.6-2.9 x), and a
+  **prompt-robustness** check across **≥ 2 phrasings/formats** for the headline result.
 
 ## Answer-matching for VQA / classification (ME6 → `ANSWER_MATCHING_MISSING`)
 
@@ -93,9 +94,13 @@ score.
 - **An LLM judge is itself a model.** If a model adjudicates correctness, **validate the judge
   against a human-labelled subset** and report its agreement; route judge validation to
   `/design-ai-benchmarking`. An unvalidated LLM judge can launder the system's own errors.
-- **Operating discipline.** Report accuracy **at the real clinical prevalence**, not on an
-  artificially balanced QA set, and state **how refusals/abstentions are scored** (counted
-  wrong, excluded, or credited) — the choice can move the headline.
+- **Operating discipline.** Accuracy alone is dominated by the majority class: for a rare
+  finding (2% prevalence) a system that always answers "negative" scores 98%. Report
+  **per-class sensitivity/specificity** (or precision/recall/F1) with CIs, and **PPV/NPV at the
+  real clinical prevalence**, not on an artificially balanced QA set; give accuracy only
+  alongside them (Reinke et al., *Nat Methods* 2024, class imbalance as a source of metric
+  pitfalls; STARD 2015). State **how refusals/abstentions are scored** (counted wrong,
+  excluded, or credited) — the choice can move the headline.
 
 ## Reader study for generated reports (ME7 → `READER_STUDY_MISSING`)
 
@@ -109,8 +114,9 @@ score.
 
 ## Gate mapping
 
-The deterministic gate (`scripts/check_mllm_eval_completeness.py`) is a presence check on the
-plan text, task-aware. This reference is the *why* behind each verdict:
+The deterministic gate (`scripts/check_mllm_eval_completeness.py`) checks the axes declared in
+`eval_manifest.json` (`--manifest`, see `eval_manifest_schema.md`), or, in prose mode, the presence
+of keywords in the plan text; task-aware. This reference is the *why* behind each verdict:
 
 | Axis (this doc) | Gate verdict | Severity |
 |---|---|---|
@@ -121,6 +127,7 @@ plan text, task-aware. This reference is the *why* behind each verdict:
 | no blinded reader study (report-gen) | `READER_STUDY_MISSING` | Major (deploy) / Minor |
 | prompt / decoding / multi-run incomplete | `PROMPT_PROVENANCE_MISSING` | Minor |
 | no answer-matching rule (vqa, classification) | `ANSWER_MATCHING_MISSING` | Minor |
+| classification metrics, not a manifest field (manifest mode) | `CLASSIFICATION_METRICS_NOT_ASSESSED` | Minor |
 
 A Major verdict is a presence gap, not proof the work is wrong — resolve it by adding the axis
 to the plan (or recording, with a stated reason, why it does not apply).

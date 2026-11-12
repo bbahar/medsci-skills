@@ -2,9 +2,9 @@
 
 # manage-project
 
-> Research project management for medical manuscripts. Scaffold project structure, track writing progress across phases, maintain project memory files, generate submission checklists and backwards timelines. Commands: init, status, sync-memory, checklist, timeline.
+> Use when managing a manuscript project over time. Scaffolds the project structure, tracks writing progress across phases, maintains project memory files, and generates submission checklists and backwards timelines (commands init, status, sync-memory, checklist, timeline).
 
-**Invoke:** `/manage-project` · **Tools:** Read, Write, Edit, Bash, Grep, Glob · **Model:** inherit
+**Invoke:** `/manage-project`
 
 ## When to use
 
@@ -40,6 +40,12 @@
 - `scaffold_templates.md`
 - `status_output_format.md`
 - `timeline_example.md`
+
+**Scripts** (`skills/manage-project/scripts/`):
+
+- `init_project.py`
+- `migrate_project_to_ssot.py`
+- `validate_project_contract.py`
 
 **Templates** (`skills/manage-project/templates/`):
 

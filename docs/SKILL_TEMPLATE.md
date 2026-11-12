@@ -9,19 +9,28 @@ Use this template when creating a new medsci-skill. Copy the structure below and
 ```yaml
 ---
 name: skill-name
-description: One-sentence description of what this skill does.
-triggers: english trigger, 한국어 트리거, comma separated keywords
-tools: Read, Write, Edit, Bash, Grep, Glob
-model: inherit
+description: Use when {the situation the user is in}. {What the skill does, and which skill takes over at its boundary.}
+metadata:
+  triggers: "english trigger, 한국어 트리거, comma separated keywords"
 ---
 ```
 
 **Fields**:
 - `name`: kebab-case, matches the directory name under `skills/`
-- `description`: Under 200 characters. Start with a verb or noun phrase.
-- `triggers`: Keywords that activate this skill. Include both English and Korean terms.
-- `tools`: Only list tools the skill actually uses. Most skills need `Read, Write, Edit, Bash, Grep, Glob`.
-- `model`: Use `inherit` unless the skill requires complex reasoning (then `opus`).
+- `description`: At most 300 characters. The first sentence starts "Use when …" and names the
+  situation in the words a user would type, because the model picks skills from this text. Name
+  the boundary with the skill it is most easily confused with. No marketing, no implementation
+  detail, no claim the SKILL.md body does not back.
+- `metadata.triggers`: Keywords that activate this skill. Include both English and Korean terms.
+  It sits under the Agent Skills `metadata` map because a top-level `triggers` is non-standard.
+- `model` (optional, Claude Code only): leave it out, and the skill runs on the session's model.
+  Add `model: opus` only when the skill needs a stronger model than the user may have chosen. The
+  field belongs to Claude Code, not to the [Agent Skills spec](https://agentskills.io/specification):
+  other hosts do not act on it, and the spec's `skills-ref validate` and a claude.ai skill upload
+  reject a SKILL.md that has it.
+
+There is no `tools` field: hosts ignore it. Do not add `allowed-tools` in its place — that field
+pre-approves tools rather than listing them.
 
 ---
 
@@ -140,41 +149,28 @@ This skill has {N} mandatory user-approval gates:
 - Explicit scope boundary 1
 - Explicit scope boundary 2
 
-## Anti-Hallucination
+## Gotchas
 
-- **Never fabricate {domain-specific items}.** If uncertain, output `[VERIFY: item]` and ask the user.
-- **Never generate references from memory.** Use `/search-lit` for all citations.
-- If a tool, package, or resource does not exist, say so explicitly rather than guessing.
-
-## Language
-
-- Communication with user: Korean
-- Code and variable names: English
-- Manuscript content: English
-- Medical terminology: always English
+- {Something an agent gets wrong in this domain without being told, and why.} Example: a
+  number or reference the skill cannot verify is marked `[VERIFY: item]`, not filled in.
 ```
 
 ---
 
-## Quality Tiers
+## Size
 
-Skills are classified by documentation depth and verification rigor:
-
-| Tier | SKILL.md Lines | Min Gates | Anti-Halluc | Output Contract | Reference Files |
-|------|---------------|-----------|-------------|-----------------|-----------------|
-| **High** | 300+ | 3+ | Required | Required | Required |
-| **Mid** | 150-300 | 2+ | Required | Required | Recommended |
-| **Thin** | <150 | 1+ | Required | Recommended | Optional |
-
-New skills should target **Mid** tier minimum. Core pipeline skills (write-paper, analyze-stats, meta-analysis) must be **High** tier.
+Keep SKILL.md short: under about 500 lines (≈5k tokens). Worked examples, long tables and
+templates go in `references/` and are read when a step needs them. For each line ask whether the
+agent would get the task wrong without it; if not, cut it. Give the reason for a rule instead of
+writing MUST. `scripts/check_phase_budget.py` enforces the upper bound; nothing rewards length.
 
 ---
 
 ## Checklist Before Publishing
 
-- [ ] YAML frontmatter has all 5 required fields (name, description, triggers, tools, model)
-- [ ] Anti-Hallucination section present with domain-specific rules
-- [ ] At least 2 quality gates with explicit user-approval language
+- [ ] YAML frontmatter has `name`, `description` (≤300 characters, led by "Use when") and `metadata.triggers`, no `tools`, and `model` only if the skill needs a named model
+- [ ] Every instruction is one the agent would otherwise get wrong (no generic boilerplate)
+- [ ] Steps that need the user's approval say so where they happen
 - [ ] Output Contract section lists all files the skill produces
 - [ ] Reference files mentioned in SKILL.md actually exist in `references/`
 - [ ] Skill Interactions section documents upstream/downstream dependencies

@@ -19,6 +19,12 @@ Sources (grounding differs by pattern — treat accordingly):
   the SNL-UCSB paper-writing skill's `gate_mechanical.md` (MIT-licensed).
 - Adapted for radiology/medical imaging context
 
+**How to read the GOOD columns.** A GOOD rewrite only removes or rephrases what the BAD text
+already says (SKILL.md Fix rules 1, 2 and 5). It never adds a number, a citation, a study name or
+a claim. Text in square brackets, such as `[metric and value from Results]` or `[CITE NEEDED]`,
+is a slot that only the author can fill from their own data or reference list. A humanize pass
+leaves the slot in place and flags it for the user. It never fills the slot itself.
+
 ---
 
 ## Content Patterns
@@ -33,15 +39,16 @@ the stage for, deeply rooted, focal point, indelible mark, paradigm shift, unpre
 
 | # | BAD (AI-generated) | GOOD (Human-written) |
 |---|-------------------|---------------------|
-| 1 | "CT plays a pivotal role in the evolving landscape of oncologic imaging" | "CT is the primary imaging modality for cancer staging" |
-| 2 | "This underscores the critical importance of early detection in improving patient outcomes" | "Early detection reduced mortality by 20% in the NLST trial" |
-| 3 | "AI represents a paradigm shift in radiology practice" | "AI-assisted detection increased sensitivity from 0.78 to 0.91" |
-| 4 | "Deep learning has made an indelible mark on medical image analysis" | "Deep learning models have achieved diagnostic accuracy comparable to radiologists in several tasks" |
-| 5 | "Setting the stage for transformative advances in precision radiology" | "These methods may improve lesion detection in low-dose protocols" |
+| 1 | "CT plays a pivotal role in the evolving landscape of oncologic imaging" | "CT is used in oncologic imaging [specific role, with its citation, from the manuscript]" |
+| 2 | "This underscores the critical importance of early detection in improving patient outcomes" | "Early detection improves patient outcomes [effect and citation from the manuscript]" |
+| 3 | "AI represents a paradigm shift in radiology practice" | (delete) |
+| 4 | "Deep learning has made an indelible mark on medical image analysis" | "Deep learning has been applied to medical image analysis" |
+| 5 | "Setting the stage for transformative advances in precision radiology" | (delete) |
 
 **Radiology-specific note:** Radiology papers are particularly susceptible to this pattern
-in introductions discussing AI/deep learning. State the specific performance metric or
-clinical outcome instead.
+in introductions discussing AI/deep learning. Delete the inflation. Where a specific metric or
+outcome belongs, take it from the manuscript's own Results or cited sources; if none is there,
+leave a bracketed slot for the author.
 
 ---
 
@@ -54,13 +61,13 @@ pioneering, state-of-the-art
 
 | # | BAD | GOOD |
 |---|-----|------|
-| 1 | "This groundbreaking study from a prestigious institution" | "In a multicenter study of 12,000 patients (Smith et al., 2024)" |
+| 1 | "This groundbreaking study from a prestigious institution" | "This study" (keep the citation the sentence already carries) |
 | 2 | "The landmark NLST trial" | "The National Lung Screening Trial (NLST)" |
-| 3 | "Using a state-of-the-art deep learning architecture" | "Using a ResNet-50 model pretrained on ImageNet" |
-| 4 | "These impressive results demonstrate" | "The AUC was 0.94 (95% CI: 0.91-0.97)" |
+| 3 | "Using a state-of-the-art deep learning architecture" | "Using a [architecture named in Methods] model" |
+| 4 | "These impressive results demonstrate" | "These results show" |
 
 **Radiology-specific note:** "State-of-the-art" is especially overused in AI radiology papers.
-Name the specific architecture and training approach instead.
+Name the architecture and training approach that Methods already states.
 
 ---
 
@@ -75,13 +82,13 @@ fostering, reflecting, contributing to, demonstrating, suggesting, indicating
 | # | BAD | GOOD |
 |---|-----|------|
 | 1 | "The AUC was 0.93 (95% CI: 0.90-0.96), highlighting the strong diagnostic performance of the model" | "The AUC was 0.93 (95% CI: 0.90-0.96)." |
-| 2 | "Sensitivity improved from 78% to 91%, underscoring the value of AI-assisted detection" | "Sensitivity improved from 78% to 91%. This improvement corresponded to detection of 13 additional malignant nodules per 1000 screens." |
-| 3 | "Inter-reader agreement was excellent (ICC = 0.92), demonstrating the reproducibility of the measurement technique" | "Inter-reader agreement was excellent (ICC = 0.92; 95% CI: 0.88-0.95)." |
-| 4 | "Processing time decreased by 40%, showcasing the efficiency gains" | "Processing time decreased by 40% (from 5.2 to 3.1 minutes per case)." |
+| 2 | "Sensitivity improved from 78% to 91%, underscoring the value of AI-assisted detection" | "Sensitivity improved from 78% to 91%." |
+| 3 | "Inter-reader agreement was excellent (ICC = 0.92), demonstrating the reproducibility of the measurement technique" | "Inter-reader agreement was excellent (ICC = 0.92)." |
+| 4 | "Processing time decreased by 40%, showcasing the efficiency gains" | "Processing time decreased by 40%." |
 | 5 | "The false-positive rate decreased to 3.2%, reflecting improved specificity" | "The false-positive rate decreased to 3.2%." |
 
-**Fix strategy:** End the sentence at the data. If interpretation is needed, start a new
-sentence with a specific claim supported by the numbers.
+**Fix strategy:** End the sentence at the data. Keep an interpretation only if the manuscript
+already makes it, as its own sentence; never derive a new figure from the numbers.
 
 ---
 
@@ -95,11 +102,11 @@ novel (overused)
 
 | # | BAD | GOOD |
 |---|-----|------|
-| 1 | "Our model achieved remarkable diagnostic accuracy" | "Our model achieved an AUC of 0.95" |
-| 2 | "A dramatic reduction in false-positive rates was observed" | "The false-positive rate decreased from 12.3% to 4.1%" |
-| 3 | "This comprehensive framework provides a robust solution" | "This framework reduced processing time by 60% while maintaining accuracy" |
-| 4 | "The novel deep learning approach demonstrated exceptional performance" | "The proposed approach outperformed the baseline by 0.08 AUC points (p = 0.003)" |
-| 5 | "A robust and comprehensive evaluation was conducted" | "We evaluated the model on three external datasets" |
+| 1 | "Our model achieved remarkable diagnostic accuracy" | "Our model's diagnostic accuracy was [metric and value from Results]" |
+| 2 | "A dramatic reduction in false-positive rates was observed" | "The false-positive rate decreased [values from Results]" |
+| 3 | "This comprehensive framework provides a robust solution" | (delete, or state what the framework does as Methods describes it) |
+| 4 | "The novel deep learning approach demonstrated exceptional performance" | "The proposed approach outperformed the baseline [difference and P value from Results]" |
+| 5 | "A robust and comprehensive evaluation was conducted" | "We evaluated the model [on the datasets named in Methods]" |
 
 **Radiology-specific note:** "Robust" is acceptable when describing a statistical method
 (e.g., "robust standard errors") but not as a general-purpose adjective for frameworks,
@@ -116,14 +123,15 @@ Several publications, The literature suggests, It has been reported, Research in
 
 | # | BAD | GOOD |
 |---|-----|------|
-| 1 | "Studies have shown that AI can improve diagnostic accuracy" | "In a meta-analysis of 82 studies, AI systems achieved pooled sensitivity of 87% (Liu et al., 2019)" |
-| 2 | "It is widely accepted that MRI is superior for soft tissue contrast" | "MRI provides superior soft tissue contrast resolution compared with CT (reference)" |
-| 3 | "Several studies have demonstrated the utility of radiomics" | "Aerts et al. (2014) demonstrated that radiomic features predicted outcomes in lung and head-and-neck cancer" |
-| 4 | "Research indicates that prompt engineering affects LLM output quality" | "Prompt structure affected diagnostic accuracy by up to 15 percentage points in GPT-4V evaluations (Wu et al., 2024)" |
-| 5 | "It has been reported that CAD systems reduce reading time" | "Park et al. (2023) reported a 25% reduction in reading time with AI-assisted detection" |
+| 1 | "Studies have shown that AI can improve diagnostic accuracy" | "AI can improve diagnostic accuracy [CITE NEEDED]" |
+| 2 | "It is widely accepted that MRI is superior for soft tissue contrast" | "MRI provides superior soft tissue contrast compared with CT [CITE NEEDED]" |
+| 3 | "Several studies have demonstrated the utility of radiomics [@ref]" | "[First author of @ref] et al. demonstrated the utility of radiomics [@ref]" |
+| 4 | "Research indicates that prompt engineering affects LLM output quality" | "Prompt engineering affects LLM output quality [CITE NEEDED]" |
+| 5 | "It has been reported that CAD systems reduce reading time" | "CAD systems reduce reading time [CITE NEEDED]" |
 
-**Fix strategy:** Replace every vague attribution with a specific citation. If you do not
-know the specific reference, flag it for the user to fill in with `[CITE NEEDED]`.
+**Fix strategy:** Name the specific study only when the sentence already carries its citation;
+a humanize pass never adds a citation. If the attribution has no citation, flag it for the user
+to fill in with `[CITE NEEDED]`.
 
 ---
 
@@ -136,13 +144,14 @@ insights, Further research is warranted, More studies are needed
 
 | # | BAD | GOOD |
 |---|-----|------|
-| 1 | "Despite these limitations, our study provides valuable insights into AI-assisted diagnosis" | "The single-center design limits generalizability to community practice settings where case mix and image quality differ" |
-| 2 | "Further research is warranted to validate these findings" | "External validation on a multi-institutional dataset with variable scanner protocols is needed before clinical deployment" |
-| 3 | "More studies are needed to fully understand the potential of this approach" | "Prospective evaluation comparing AI-assisted and conventional reading in a screening population would quantify the clinical impact" |
-| 4 | "Despite challenges, the future of AI in radiology is promising" | "Integration into the clinical PACS workflow remains an engineering challenge requiring vendor collaboration" |
+| 1 | "Despite these limitations, our study provides valuable insights into AI-assisted diagnosis" | (delete) |
+| 2 | "Further research is warranted to validate these findings" | "These findings require validation [design — author to supply]" |
+| 3 | "More studies are needed to fully understand the potential of this approach" | (delete, or flag: [specific next study — author to supply]) |
+| 4 | "Despite challenges, the future of AI in radiology is promising" | (delete) |
 
-**Fix strategy:** State the specific limitation, its consequence, and the specific study
-design that would address it.
+**Fix strategy:** Delete the formula. A specific limitation, its consequence and the study design
+that would address it come from the author. If the manuscript does not already state them, leave
+a bracketed slot and flag it for the user. Never write one.
 
 ---
 
@@ -216,7 +225,7 @@ AI overuses "Not only X but also Y" constructions.
 | # | BAD | GOOD |
 |---|-----|------|
 | 1 | "The model not only improved sensitivity but also reduced false positives" | "The model improved sensitivity and reduced false positives" |
-| 2 | "This approach not only streamlines workflow but also enhances diagnostic confidence" | "This approach reduces reading time by 30% and improves diagnostic confidence" |
+| 2 | "This approach not only streamlines workflow but also enhances diagnostic confidence" | "This approach streamlines the workflow and enhances diagnostic confidence" |
 | 3 | "AI not only assists in detection but also aids in characterization" | "AI assists in both detection and characterization" |
 
 **Threshold:** More than 1 per section is a red flag.
@@ -362,12 +371,14 @@ AI ends papers with content-free optimistic statements.
 | # | BAD | GOOD |
 |---|-----|------|
 | 1 | "The future looks bright for AI-assisted radiology" | (delete) |
-| 2 | "This paves the way for transformative advances in diagnostic imaging" | "Prospective validation in a screening population is the next step before clinical implementation" |
-| 3 | "AI continues to reshape the landscape of medical imaging" | "AI-assisted detection reduced missed cancers by 12% in this retrospective analysis" |
-| 4 | "These findings open new avenues for research" | "Future work should evaluate the model on external datasets with heterogeneous scanner protocols" |
-| 5 | "This work lays the foundation for future innovations" | "The trained model and evaluation code are publicly available at [URL]" |
+| 2 | "This paves the way for transformative advances in diagnostic imaging" | (delete, or flag: [next step — author to supply]) |
+| 3 | "AI continues to reshape the landscape of medical imaging" | (delete) |
+| 4 | "These findings open new avenues for research" | (delete) |
+| 5 | "This work lays the foundation for future innovations" | (delete) |
 
-**Fix strategy:** Replace with the single most specific implication or the concrete next step.
+**Fix strategy:** Delete. If the paragraph is then left without a closing sentence, end on a
+finding or next step the manuscript already states, or leave `[CONCLUSION — author to supply]`
+and flag it for the user.
 
 ---
 
@@ -405,15 +416,20 @@ Self-reference parentheticals of the form `(Methods §X)`, `(Results §Y)`, `(Me
 
 ### Pattern 21: AI Disclosure Boilerplate (Body)
 
-Boilerplate paragraphs such as "Artificial Intelligence Disclosure" / "Generative AI was not used to create..." / "AI Acknowledgement" appearing in the manuscript body. These are needed on submission forms and cover letters, but placing them in the body reads to a reviewer as a declaration that "this was written by AI" — an AI-generated signal.
+An AI-use disclosure belongs wherever the target journal asks for it, and journals disagree:
+some require it in Methods or Acknowledgments, others want it only in the cover letter, title
+page or submission form. The pattern is a disclosure in the wrong place for the target, or one
+repeated in several places when the journal asks for one. Take the location from the journal
+profile's `Disclosure location`; `/self-review` `check_classical_style.py` (`INBODY_AI_DISCLOSURE`)
+reports a body disclosure only when the target does not accept it there.
 
 | # | BAD | GOOD |
 |---|-----|------|
-| 1 | An "## Artificial Intelligence Disclosure" paragraph at the end of the body | Delete the whole paragraph → state it only in the cover letter or submission form |
-| 2 | "Generative AI was not used to create, modify, or alter any images, figures, or tables in this manuscript." (in body Methods) | (delete) — the `~/.claude/rules/journal-ai-image-policies.md` boilerplate belongs only in the cover letter |
-| 3 | "We acknowledge the use of ChatGPT for language editing" in the Acknowledgments section | Move to the cover letter per journal policy, or reduce to "Language editing was performed" |
+| 1 | A generic "## Artificial Intelligence Disclosure" section in the body of a journal that wants disclosure only in the cover letter or submission form | Move it to the place the journal asks for |
+| 2 | The same disclosure in Methods, Acknowledgments and the cover letter when the journal asks for one place | Keep it where the journal asks; remove the copies |
+| 3 | A required disclosure reworded into something vaguer ("Language editing was performed") so the tool is not named | Never. Name the tool and the tasks wherever the journal requires disclosure |
 
-**Detection:** `grep -inE "artificial intelligence disclosure|generative ai was not used|ai acknowledg(e)?ment" manuscript.md` → 0 lines (body).
+**Detection:** `grep -inE "artificial intelligence disclosure|generative ai was not used|ai acknowledg(e)?ment" manuscript.md` → 0 lines in the body, unless the journal profile's `Disclosure location` puts it there.
 **Fix strategy:** Remove from the body → keep only on the submission form / cover letter. Exception only when the journal requires an in-body statement.
 
 ---
@@ -439,7 +455,7 @@ Latin (*in vivo*, *et al.*, *post hoc*), gene and species names (*BRCA1*, *E. co
 titles. A **bold run-in subheading** at line start is correct Nature/npj style
 (`manuscript-style-classical.md` §1.2) and is not counted.
 
-**Detection:** `/self-review` `scripts/check_emphasis_density.py --manuscript manuscript.md`
+**Detection:** `python3 "${CLAUDE_SKILL_DIR}/../self-review/scripts/check_emphasis_density.py" --manuscript manuscript.md`
 → `EMPHASIS_OVERUSE` (Minor). Counts non-allowlisted *italic* spans per 1,000 body words;
 bold is deliberately excluded so the gate does not fight the run-in-subheading rule. Fires
 only when density and raw count both clear a floor, so one stray italic in a short note is
@@ -473,7 +489,7 @@ prose, the negative-definition rate ran 0.00–0.45% of sentences (seven of eigh
 and the short-declarative share 0.94–10.47%. A manuscript at 2% and 24% is outside that
 range on both axes.
 
-**Detection:** `/self-review` `scripts/check_aphorism_density.py --manuscript manuscript.md`
+**Detection:** `python3 "${CLAUDE_SKILL_DIR}/../self-review/scripts/check_aphorism_density.py" --manuscript manuscript.md`
 → `APHORISM_DENSITY` (Minor). Fires only when BOTH rates clear thresholds set above the
 observed published maxima, so ordinary emphatic prose does not trip it. Use `--calibrate`
 to regenerate thresholds on your own corpus; the shipped numbers come from argumentative
@@ -515,7 +531,7 @@ than" runs 1.4–3.8 per 1,000 body words and sentence-initial clefts are absent
 thresholds (antithesis 6.0 / 1,000, cleft 2.5 / 1,000, each behind a raw-count floor) sit
 above that range, so a lone functional "rather than" or one pseudo-cleft never trips it.
 
-**Detection:** `/self-review` `scripts/check_rhetorical_density.py --manuscript manuscript.md`
+**Detection:** `python3 "${CLAUDE_SKILL_DIR}/../self-review/scripts/check_rhetorical_density.py" --manuscript manuscript.md`
 → `ANTITHESIS_DENSITY` / `CLEFT_DENSITY` (both Minor, independent). Each fires only when the
 per-1,000 rate AND the raw count both clear a floor, so functional use in ordinary prose does
 not trip it.
@@ -653,6 +669,16 @@ Apply all applicable patterns (1-21 and 25) with zero tolerance.
 - The conclusion should be 1-3 sentences stating the main finding and its specific implication.
 - No significance inflation, no generic optimism.
 
+### Meta-analysis / systematic review (Patterns 19, 20, 21)
+
+- Methods: `§` markers (19), self-reference parentheticals (20) and AI-disclosure boilerplate
+  (21) are senior-MA-reviewer red flags.
+- Discussion: self-reference parentheticals (19, 20) are especially common when discussing methods.
+
+### Any section (Pattern 21)
+
+- An AI-use disclosure goes where the target journal asks for it, once (Pattern 21).
+
 ### Response to Reviewers / Cover letter (Patterns 22, 23, 24 — plus 13, 16, 19)
 
 - Response letters and cover letters are reviewer-facing argument, not change-logs. The
@@ -684,12 +710,12 @@ Run this checklist on the final manuscript before submission:
 - [ ] AI pattern density < 2.0 per 1000 words
 - [ ] § (section sign): 0 occurrences (Pattern 19) — `grep -c "§"` = 0
 - [ ] (Methods §X) / (Results §Y) self-reference: 0 occurrences (Pattern 20)
-- [ ] AI Disclosure boilerplate in body: 0 occurrences (Pattern 21) — cover letter / submission form only
+- [ ] AI disclosure placed where the target journal asks for it, once, naming the tool (Pattern 21)
 - [ ] Inline-emphasis over-use (Pattern 25) — `check_emphasis_density.py`; strip single-word and whole-clause italics, keep stat symbols / Latin / gene-species
 - [ ] Aphorism density (Pattern 26) — `check_aphorism_density.py`; a run of negative definitions plus very short declaratives; absorb most into neighbouring sentences, keep two or three
 - [ ] Antithesis / cleft density (Pattern 27) — `check_rhetorical_density.py`; "rather than" / "not X but Y" / "X, not Y" and sentence-initial "What … is …" / "It is … that …"; delete the negative half and rewrite positive, keep two or three
 - [ ] Sentence-length variety (SKILL.md Fix rule 7) — `check_sentence_variety.py`; short (8-12 words) and long (25-35 words) sentences both present
-- [ ] Rewrite footprint within bounds — `check_edit_footprint.py` when humanize rewrote a file; >30% changed warrants a re-read, >50% is a halt
+- [ ] Rewrite footprint reviewed — `check_rewrite_fidelity.py` when humanize rewrote a file; `EDIT_FOOTPRINT_HIGH` (over `--warn-pct`, default 70% of word tokens) means re-read the diff; it is advisory and never halts on its own
 
 ### Response letters / cover letters only (Patterns 22-24)
 

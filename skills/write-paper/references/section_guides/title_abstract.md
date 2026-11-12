@@ -32,6 +32,14 @@ Every title should contain:
 - Remove filler words ruthlessly — every word must earn its place
 - Word limit varies by journal (e.g., Radiology: 15 words)
 - Do not use abbreviations in the title unless universally understood (CT, MRI, AI)
+- **General-purpose method validated on one task**: lead with the method and its general purpose,
+  and put the disease or task in a validation clause — e.g. *"Self-Supervised Motion Correction
+  Improves Meniscal Tear Detection on Knee MRI"* → *"Self-Supervised Motion Correction for
+  Accelerated MRI: Validation with Meniscal Tear Detection"*. The abstract then opens with the
+  general problem the method addresses and states the aim actually performed (develop and validate,
+  or validate an existing method). The four components
+  still apply (the disease sits in the validation clause); claim no more generality than was
+  validated, and keep a disease-first title when the disease, not the method, is the contribution.
 
 ### Self-Check
 
@@ -97,7 +105,9 @@ or combine Background and Purpose).
 | European Radiology | 250 words |
 | European Journal of Radiology | 350 words |
 
-Always check the loaded journal profile for the exact limit.
+Always check the loaded journal profile for the exact limit. Words left under the limit are not a
+target — do not pad toward the cap. Do not state a word count or limit inside the manuscript text
+(it belongs in the submission form) unless the journal asks for it there.
 
 ### Section-by-Section Rules
 
@@ -107,6 +117,7 @@ Always check the loaded journal profile for the exact limit.
 - No "Disease X is a major health concern" openers
 - Go directly to what is unknown or insufficient about current methods
 - 2-3 sentences maximum
+- The purpose must say the same thing as the purpose at the end of the Introduction (population, index test or exposure, comparator, outcome). Reusing the same sentence is the simplest way to keep them aligned; compressing it is fine if the meaning does not drift
 
 #### Methods
 
@@ -130,6 +141,7 @@ Always check the loaded journal profile for the exact limit.
 - 1-2 sentences only: state the core finding and its clinical implication
 - Do not include limitations or "further studies are needed" (add only if reviewer requests)
 - Must be a directly citable statement
+- Must say the same thing as the conclusion at the end of the Discussion, in the same terms (reusing the sentence is the simplest way); a reader of only one of the two should take away the same claim
 
 ### Abstract Self-Check
 

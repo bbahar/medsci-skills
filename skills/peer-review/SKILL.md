@@ -1,9 +1,8 @@
 ---
 name: peer-review
-description: Peer review assistant for medical journals. Generates structured review drafts with journal-specific formatting. Constructive developmental tone with systematic manuscript analysis.
-triggers: peer review, manuscript review, review paper, reviewer comments, 리뷰, 논문 리뷰, review invitation, journal review
-tools: Read, Write, Edit, Bash, Grep, Glob
-model: inherit
+description: Use when reviewing someone else's manuscript for a journal, such as after a review invitation or for a revised R1/R2 version. Drafts a structured, constructive review in the journal's format. Never for your own manuscript; that is /self-review.
+metadata:
+  triggers: "peer review, manuscript review, review paper, reviewer comments, 리뷰, 논문 리뷰, review invitation, journal review"
 ---
 
 # Peer Review Skill
@@ -62,22 +61,37 @@ guards *you* against an author's injection; it is unrelated to a venue's own
 canary text, and you should always follow the journal's stated policy on whether
 an LLM may touch a confidential manuscript at all (most prohibit uploading it).
 
+EM (Editorial Manager) figure-page labels are reported as INFO, not SUSPICIOUS.
+
 If step 1 dies, do not read step 2's error as the answer. The extractor writes no
 manifest on failure, so the detector then reports a missing file and the real
 traceback scrolls past — which is why `set -euo pipefail` is on the snippet. A
 scan that did not run is not a scan that found nothing.
 
 The formatting-based hiding (colour, size, position, render mode, metadata) is
-caught deterministically; the challenge card
+caught deterministically. Colour is judged against the background under each span's
+own box when that box has one flat background colour (paper, a box, a banner); over an
+image or a gradient it is judged against the page, as before. The text's own pixels
+never count as background. The extractor also renders the page and records, per span,
+how many glyphs actually show in the span's colour (blended at the span's opacity, so a
+faint watermark counts as drawn), plus the render mode and opacity from PyMuPDF's text
+trace. So text under an opaque shape, text on its own colour and zero-opacity text are
+flagged (`NOT_RENDERED`, `TRANSPARENT`), and every flagged span is left out of
+`--sanitize`. **Known limits:** text hidden under a picture, a gradient, or a shape drawn
+in the text's own colour still reads as drawn, and so does text on an image or gradient
+whose colour matches it. The challenge card
 (`scripts/check_pdf_injection_challenge/`) proves it on synthetic fixtures in CI
 without PyMuPDF. That card audits pre-written manifests, so it cannot see a fault
 in the extractor that produces them; `tests/test_scan_pdf_layers_xmp.sh` covers
 the XMP metadata read, whose failure silently disabled the metadata vector on
-every PDF that actually carried a packet.
+every PDF that actually carried a packet. `tests/test_pdf_render_evidence.sh` builds
+a real PDF for each of the four hiding methods and runs it through the extractor,
+the detector and `--sanitize`; that part needs PyMuPDF and is skipped where it is
+not installed.
 
 ### Phase 2: Manuscript Analysis
 
-1. **Read the manuscript PDF** thoroughly — Abstract, Methods, Results, Discussion, Tables, Figures.
+1. **Read the manuscript PDF** thoroughly (all sections, Tables, Figures); then, before the detailed checks, follow the provisional-record instructions at the top of `references/review_draft_template.md` and save the record in the review's `work/` folder (finalize it in Phase 3).
 2. **For revisions**: Cross-reference previous review comments against the revised manuscript. Do
    **not** trust the response letter's "we added / we changed X" at face value — the source of truth is
    the revised body. When you have both the author response and the revised manuscript as text/`.docx`,
@@ -85,13 +99,13 @@ every PDF that actually carried a packet.
 
    ```bash
    python3 ${CLAUDE_SKILL_DIR}/../revise/scripts/check_response_claims.py \
-     --response author_response.md --manuscript revised_manuscript.docx --strict
+     --response author_response.md --manuscript revised_manuscript.docx --strict  # [--values audit.json]
    ```
 
    A `RESPONSE_QUOTE_UNVERIFIED` / `RESPONSE_CITATION_UNVERIFIED` verdict means the response asserts a
    specific added sentence or citation that is not in the revised body — verify it by hand, and if
-   confirmed, raise it (the author-side `/revise` skill runs the same gate; see
-   `~/.claude/rules/peer-review-response-verification.md`). If the whole round already had one
+   confirmed, raise it (the author-side `/revise` skill runs the same gate, and `--values` checks the
+   authors' numerical audit table; see `~/.claude/rules/peer-review-response-verification.md`). If the whole round already had one
    response-vs-body mismatch, re-verify **every** prior comment, not a sample.
 
    `RESPONSE_QUOTE_UNRESOLVED` (minor) is the opposite verdict — never write it up. The words ARE
@@ -156,69 +170,6 @@ every PDF that actually carried a packet.
 6. **Prioritize**: Rank issues by impact on validity. Select top 3-5 for Major, 3-4 for Minor. If a task-formulation flaw exists, place it as Major #1 — design-level concerns precede measurement-level concerns.
 7. **Gate**: Present findings to user — "Here are the key issues I found — do you agree with this prioritization?"
 
-### Phase 2F: Recommendation Calibration for AI/Method and Review Papers
-
-Before finalizing **Major Revision** (or, for AJR-style forms, a Reconsider tier) for an original AI, LLM,
-or methodology paper **— or for a Review / narrative / primer article —** explicitly run this calibration
-gate. It prevents a valid issue list from under-weighting contribution and priority.
-
-1. **Design/validity flaw**: Is there a central design, leakage, reference-standard, baseline, or workflow
-   mismatch that threatens the main claim?
-2. **Speculative value**: Is the clinical or research-use pathway weak, with no clear decision-impact,
-   workflow-change, downstream-validation, or actionability argument?
-3. **Weak novelty**: Is the work hard to distinguish from close prior AI/LLM extraction or validation
-   papers, or does it omit the baseline needed to show that the proposed adaptation adds value?
-
-**These take evidence, not opinions.** Answered from the manuscript's own framing they fail in one
-direction only — toward the revision tier. Three rules, with the incident, in
-`references/reviewer_calibration/recommendation_calibration.md`:
-
-- **3 answered "no"** must name what was checked: the validation status of each component
-  (composition of individually established parts is engineering, not a finding) and the tools already
-  delivering the claimed output.
-- **2 answered "no"** may not rest on the clinical need. The need is a fact about the world; the
-  question is this artifact's pathway to a decision.
-- **If the Phase 2 task-formulation audit fired, 3 defaults to YES** unless separately evidenced —
-  a contribution whose measured task differs from its claimed task has not been demonstrated.
-
-If 2 and 3 both hold, do not default to Major Revision simply because the review is constructive. In the
-confidential comments, state that the manuscript has a priority/contribution problem in addition to the
-fixable technical issues, and calibrate the recommendation toward the journal's stronger option (for
-example, reject/resubmission where that tier exists). If only 1 holds and the value/novelty case is strong,
-Major Revision remains appropriate.
-
-**Fixable vs unfixable tier-domination**: separate defects that a revision can repair (extraction errors,
-missing supplementary, a mislabeled table, an over-claiming sentence) from defects that cannot be repaired
-within the current submission (poolability of incommensurable studies, a broken construct, an invalid
-evaluation instrument). When both classes are present, the **unfixable** class governs the recommendation —
-do not let a long list of fixable items reframe an unfixable core as "addressable in revision."
-
-**Salvage-reframe that shrinks the contribution is NOT a fixable major revision.** When your proposed fix
-for a construct/validity flaw is to *narrow the claim* (a clinical claim reframed as a weaker technical
-signal, a full study reframed as a proof-of-concept), check whether that narrower framing survives
-the novelty/importance bar. If novelty/importance is ALREADY weak — your own scorecard, or a second
-opinion, puts Originality or Reader-interest at or below mid — then the reframe *reduces* the
-contribution and makes the importance problem worse, not better. A contribution shrunk to survive a
-validity flaw is a **Reject-leaning** outcome (the contribution is the product, not
-addressable-in-revision), not an encourage-major-revision. Deterministic trigger to self-audit: if
-your confidential note calls the claim narrower or more modest than the manuscript claims AND your
-recommendation is Reject-family-adjacent, do not upgrade it to major revision on the reframe.
-
-**Review/narrative/primer escalation** *(the contribution IS the product)*: for a review article there is no
-data to re-analyze; the distinct contribution — novelty, integrative synthesis, domain-specificity — is the
-deliverable itself. Therefore **weak novelty / no distinct contribution / not domain-specific is
-unfixable-in-current-form**: "add a distinct contribution" asks for a substantially different paper, so each
-gap looking individually "addressable in revision" is a trap. When RV1 (novelty) is a Major in a saturated
-space and no distinct contribution exists, escalate the recommendation one tier toward Reject (e.g.,
-Reconsider → Reject) rather than defaulting to the revision tier.
-
-**Confidential-note Reject-grade self-grep**: before committing the recommendation, re-read your own
-Confidential Comments to the Editor. If they contain Reject-grade language — "hard to distinguish from work
-it already cites," "cannot be resolved by minor editing," or **deferring the value/priority judgment to the
-editorial board** ("whether the incremental value clears the bar is a scope judgment I leave to the
-board") — that deferral is itself a Reject-grade tell, not a neutral hand-off. Re-examine plain Reject so the
-confidential note and the recommendation are consistent.
-
 ### Phase 2 Extensions — routing
 
 Each row fires **in addition to** the generic Phase 2 checklist; several can co-apply.
@@ -228,14 +179,14 @@ output (Major / Minor comments, Confidential Comments to the Editor, Major #1).
 
 | | Fires when | Module (`references/domain-probes/`) |
 |---|---|---|
-| **2A** Systematic Review / Meta-Analysis | (P0) plus 19-probe checklist (P1–P19) **only when manuscript type is "Systematic Review", "Meta-Analysis", or "Systematic Review and Meta-Analysis"** | `sr_ma.md` |
+| **2A** Systematic Review / Meta-Analysis | (P0) plus 20-probe checklist (P1–P20) **only when manuscript type is "Systematic Review", "Meta-Analysis", or "Systematic Review and Meta-Analysis"** | `sr_ma.md` |
 | **2B** Survival / Prognostic Model | **only when manuscript involves time-to-event outcomes** (OS, DFS, LRFS, DMFS, RFS, PFS, time-to-recurrence) **or prognostic model development** (Cox proportional hazards, DeepSurv, DeepHit, Random Survival Forest, nomogram development/validation, multi-state or multi-outcome survival cascade, risk-stratification with cutoff-based phenotyping) | `survival_prognostic.md` |
 | **2C** Radiomics / Feature-Reproducibility | **only when the manuscript maps radiomic feature reliability/reproducibility or feature stability** (test-retest, noise sensitivity, ICC-based reproducibility), runs an **acquisition–reconstruction parameter sweep** (tube voltage, tube current, bin width, reconstruction kernel, slice thickness, iterative reconstruction), or claims that **reliability/robustness/harmonization-based feature filtering** (e.g., ComBat, ICC thresholding) improves a downstream clinical task or transports across scanners/centers/vendors | `radiomics.md` |
 | **2D** Narrative / Review-Article | (RV1–RV9) **only when the manuscript is a Review / narrative review / primer / state-of-the-art / educational review** — i.e., a non-systematic synthesis rather than original research | `narrative_review.md` |
 | **2E** Observational / Confounding | (O1–O18) **only when the manuscript is an observational study** (cohort, case-control, cross-sectional, health-screening / registry) **whose central claim is an adjusted exposure–outcome association** estimated by covariate adjustment rather than randomization | `observational_confounding.md` |
 | **2G** AI / ML Overclaiming | an AI/ML **primary study** (diagnostic, prognostic, triage, detection) makes a clinical claim in the Title/Abstract/Conclusion — generalizable, outperforms clinicians, deployment-ready, can replace a reader | `ai_overclaiming.md` |
 | **2H** RCT / Intervention-Trial | (RC0–RC7) **only when the manuscript is a randomised controlled trial** (parallel-group, crossover, cluster, stepped-wedge) whose claim is that an intervention *causes* an outcome difference | `rct_trial.md` |
-| **2I** Diagnostic-Accuracy / Reader-Study | (D1–D12) **only when the manuscript is a diagnostic test accuracy (DTA) primary study** — an index test against a reference standard — including **multi-reader multi-case (MRMC)** reader studies (AI-vs-reader or modality comparison) | `diagnostic_accuracy.md` |
+| **2I** Diagnostic-Accuracy / Reader-Study | (D1–D15) **only when the manuscript is a diagnostic test accuracy (DTA) primary study** — an index test against a reference standard — including **multi-reader multi-case (MRMC)** reader studies (AI-vs-reader or modality comparison) | `diagnostic_accuracy.md` |
 | **2J** Case-Report | (CR1–CR9) **only when the manuscript is a case report, a case series, or a small single-patient clinical narrative** | `case_report.md` |
 | **2K** Image-Synthesis / Cross-Modality Generation | (IS1–IS4) **only when the manuscript synthesizes one imaging modality from another** (MRI→PET, MRI→CT, CT→MRI, non-contrast→contrast, low-dose→full-dose) using a generative model (GAN/PatchGAN, diffusion, U-Net/Swin-UNet, CycleGAN) **and** frames the synthetic image as carrying functional/molecular information or as a substitute for the unavailable real target modality | `image_synthesis.md` |
 | **2L** Fairness / Equity / Subgroup-performance | (EQ0–EQ6) **only when the manuscript makes (or implies) a claim that an AI/ML model, score, or test performs adequately across a heterogeneous population** (generalizable / deployment-ready / "works for patients") **or presents subgroup analyses as evidence of fairness/equity** | `equity_fairness.md` |
@@ -253,7 +204,7 @@ does not apply* — read that before deciding a row does not fire.
 
 ### Phase 2F: Recommendation Calibration for AI/Method and Review Papers
 
-Before finalizing **Major Revision** (or an AJR-style Reconsider tier) for an original AI,
+Before finalizing **Major Revision** (or a journal's reconsider tier) for an original AI,
 LLM or methodology paper — or for a Review / narrative / primer article — run the calibration
 gate in `${CLAUDE_SKILL_DIR}/references/reviewer_calibration/recommendation_calibration.md`.
 It stops a valid issue list from under-weighting contribution and priority. Peer-review only:
@@ -276,8 +227,9 @@ python3 "${CLAUDE_SKILL_DIR}/scripts/check_self_improvement_claims.py" \
 
 Before writing comments, skim the relevant model in `references/exemplar_reviews/` for the
 finding type at hand (AI overclaiming, reference-standard validity, data leakage, missing
-calibration, optimistic validation reporting, selective outcome reporting). Each shows the same four moves — anchor the location, state the gap, phrase
-it as a partner (Aczel-compliant), and calibrate severity (design-level → Major #1). Model
+calibration, optimistic validation reporting, selective outcome reporting, comparator
+adequacy). Each shows the same four moves — anchor the location, state the gap, phrase
+it as a partner (Watling-compliant), and calibrate severity (design-level → Major #1). Model
 the anchoring and phrasing; do not copy — they are synthetic teaching examples.
 
 **Request-type discipline (classify every Major's ask before it ships).** Sort each request into two kinds:
@@ -287,7 +239,7 @@ the anchoring and phrasing; do not copy — they are synthetic teaching examples
 
 A computation request must carry an explicit justification that the existing tables cannot answer the question; otherwise reword it as disclosure or drop it. Prefer **naming the estimator** you want (e.g. *Hodges–Lehmann pseudomedian*) over a loose phrase (*"paired median differences"*), which authors adopt verbatim (an odd-n integer-scale "median difference" is impossible — `check_paired_difference_estimator.py`). A comment may be **both** — split it: never *request* a subset-vs-parent-cohort P value, because the groups are nested and the test is invalid (`check_nested_group_comparison.py`, and the observational/DTA domain probes); ask for the subset's characteristics (disclosure) and judge representativeness by magnitude. This is not "ask for less" — a short review with two computation requests is worse than a long one with ten disclosure requests.
 
-**This rule is enforced, not merely stated.** It shipped as prose once and did not bind: the first live review after it landed went out with six computation requests and a demand for a second reader, and passed every neighbouring gate (word count, em-dash density, forbidden words, attitude markers) because those are scripts and this was a sentence. Run the gate on your own draft before Phase 5:
+**This rule is enforced, not merely stated.** Stated only in prose it does not bind: a draft full of unjustified computation requests passes every neighbouring gate (word count, em-dash density, forbidden words, attitude markers), because those are scripts and this is a sentence. Run the gate on your own draft before Phase 5:
 
 ```bash
 python3 "${CLAUDE_SKILL_DIR}/scripts/check_review_request_types.py" \
@@ -317,7 +269,14 @@ after submission), `BOX_DUPLICATION` (the editor's note is the authors' note pas
 write it in its own register: what was done, what is left, whether it needs another expert
 round), `BOX_MISSING`.
 
-Generate `{manuscript_id}_review_draft.md`:
+Both gates read the authors' block down to the next heading of the same or a higher level
+(or the editor's heading), so `### Major Comments` sub-headings stay inside it.
+
+**Known limits.** `RECOMMENDATION_IN_AUTHOR_BOX` matches a short fixed list of grade
+phrasings. It misses others, for example the plural "major revisions", a bare
+"Recommendation: Reject." or "I would recommend rejection". Widening that list over prose
+would also flag ordinary author-facing sentences, so the gate does not try. Read the authors'
+block yourself for any grade before submitting, and check the compiled proof as well.
 
 Generate `{manuscript_id}_review_draft.md` from the skeleton in
 `${CLAUDE_SKILL_DIR}/references/review_draft_template.md`. It has three blocks: a
@@ -333,7 +292,7 @@ Authors** block (research summary + strengths, then Major, Minor, and a closing 
 - **Tier 1 Minimal (≤700w)**: R1 revisions, Minor Revision recommendations, reporting-only manuscripts. Major 1-3, Minor 3-5.
 - **Tier 2 Standard (700-1000w) ★ default — most reviews should land here**: typical first-round reviews with 1-2 design-level concerns. Major 3-5, Minor 4-6. Sweet spot 800-950w — sits just above the 90th percentile of peer reviewers, expressing design-level rigor without overwhelming editor parsimony.
 - **Tier 3 Extended (1000-1400w)**: justified only when (a) fatal-flaw hierarchy required (≥2 design-level limitations), (b) cross-domain methodology (medical AI × radiology × biostatistics), (c) task-formulation misframing critique, or (d) AI/LLM evaluation requiring model-spec + prompt + selection-bias + framing 4-layer audit. Major 3-5, Minor 5-7. Frequency cap: ≤20% of reviews rolling — if every review trends Tier 3, the niche signal dilutes.
-- **Hard cap 1400 words**. Measure with `awk + wc` (no estimation) — at Phase 3 mid-checkpoint and Phase 6 final.
+- **Hard cap 1400 words**. Measure with `check_review_length.py` (no estimation) — at Phase 3 mid-checkpoint and Phase 6 final.
 - Each Major: 5-8 lines (Tier 1-2) or 8-12 lines (Tier 3, with Why it matters + alternative framings).
 - **Reference-baseline ratio** (self-QC metric): compute `your_wc / 545` and report. Ratio > 2.0 (above 1090w) flags trim candidate. Ratio < 1.0 may indicate insufficient design-level rigor for AI/methodology critique reviews.
 
@@ -353,20 +312,20 @@ After drafting, verify mechanically:
 3. **Feasibility**: All suggested revisions achievable with existing data.
 4. **Word count (3-tier, measured)**: Run `check_review_length.py --review <draft> --tier N --strict`, not `awk + wc` by hand — raw markdown counts `**Major` and table pipes, and a total alone never says which comment to cut. Read the per-item table it prints. Identify which tier the Author section falls in (Tier 1 ≤700w / Tier 2 700-1000w ★ default / Tier 3 1000-1400w). Most reviews should land in Tier 2. If Tier 3, justify with a one-line rationale (which design-level concern warrants the extra length) and verify Tier 3 frequency stays ≤20% rolling. Hard cap 1400w. Also measure at Phase 3 mid-checkpoint, not only at final. Report **reference-baseline ratio** (`wc / 545w`) — ratio > 2.0 flags trim candidate.
 5. **Forbidden words / two-box integrity**: Run `check_review_boxes.py --review <draft> --strict`. No recommendation grade in Comments to the Authors, both blocks present, and the editor's block not a paste of the authors'.
-6. **Major #1 = task formulation flaw** (if present): if §3C-1 audit found framing mismatch, place it as Major #1. Do not let it be downgraded into adjacent measurement-level issues (selection bias, sample size).
+6. **Major #1 = task formulation flaw** (if present): if the Phase 2 step 3 task-formulation audit found a framing mismatch, place it as Major #1. Do not let it be downgraded into adjacent measurement-level issues (selection bias, sample size).
 7. **Request-type gate (deterministic)**: run `check_review_request_types.py --review <draft> --strict` on your own draft. Any MAJOR verdict blocks: reword the ask as disclosure, justify why the existing tables cannot answer it, or drop it. This is the Phase 3 rule with a script behind it.
 8. **AI pattern density (quantified threshold)**: em-dash ≤2 per 1000 words, structural rule-of-three ≤2 per Major comment, significance inflation ("genuinely", "truly", "indeed") 0 per Major, hedged Minor proportion ≥50% ("could", "would help", "I'd suggest" vs bare "Please [verb]").
-9. **Aczel tone audit** (`references/aczel_2021_reviewer2_patterns.md`):
+9. **Watling tone audit** (`references/aczel_2021_reviewer2_patterns.md`):
    - 0 attitude markers (reject/absurd/ridiculous/naive/oblivious/fail)
    - 0 personal attacks ("the authors seem...", "the authors do not understand")
    - ≥2 first-person rapport instances in General Comments / Closing Remark
    - ≥50% of Minor requests use hedged forms ("I'd suggest," "could," "would help") rather than imperative ("must," bare "Please [verb]")
    - General Comments names ≥2 specific strengths before listing concerns
    - At most 1 typo/grammar Minor Comment, only if in formal section or systematic
-10. **SR-MA-specific QC** (if Phase 2A applied): Confirm the P0 internal-consistency gate was run before any fabrication claim. For each P1–P19 probe used, verify the corresponding Major comment cites source PMID + source page/table reference + verbatim quote, and that no probe lead was promoted to a finding without source confirmation (leads-vs-findings discipline). Reviews citing extraction errors without source-page reference are not actionable for authors.
+10. **SR-MA-specific QC** (if Phase 2A applied): Confirm the P0 internal-consistency gate was run before any fabrication claim. For each probe used that makes a study-level factual claim (extraction, eligibility, an included study's design), verify the corresponding Major comment cites source PMID + source page/table reference + verbatim quote; a synthesis-method finding (e.g. P20) cites the manuscript location and the methodological reason instead. Check that no probe lead was promoted to a finding without source confirmation (leads-vs-findings discipline). Reviews citing extraction errors without source-page reference are not actionable for authors.
 11. **Radiomics-reproducibility QC** (if Phase 2C applied): If an acquisition-parameter sweep predicts an outcome from its own grid axes (R1 design-grid circularity) or the substantive result is a cross-domain failure framed as success (R3), confirm the recommendation reflects design-level severity and is not softened to a reporting fix. Where a model × threshold/cohort grid yields a few p < 0.05, confirm the multiplicity / expected-false-positive count is named (R4), not deferred to "statistical review needed."
 12. **Review-article QC** (if Phase 2D applied): Confirm RV1–RV9 are reflected — in particular that novelty/value-add (RV1) is raised for a saturated topic and that gap-filling (RV8) is present, not just error-spotting. Verify SANRA is used as an appraisal aid, not over-enforced as a reporting guideline (no PRISMA demand on a narrative review; only RV3 is SANRA-aligned and phrased as a suggestion). Verify every suggested addition uses "consider adding" phrasing (no "must cite"), is source-confirmed, and that preprints are labeled as preprints (not equated with peer-reviewed guidelines). Confirm Phase 2F was run for the recommendation: when RV1 novelty is a Major in a saturated space with no distinct contribution, the recommendation is escalated toward Reject (the contribution IS the product — weak novelty is unfixable-in-current-form), not defaulted to the revision/Reconsider tier.
-13. **AI/method/review priority QC**: Before a Major Revision (or Reconsider) recommendation, confirm Phase 2F
+13. **AI/method/review priority QC**: Before a Major Revision (or reconsider-tier) recommendation, confirm Phase 2F
     was run. If novelty and clinical/research utility are both weak, the recommendation must reflect that
     contribution-level concern rather than treating all issues as fixable reporting defects. When fixable and
     unfixable defects coexist, confirm the unfixable class governs the tier, and that the Confidential
@@ -402,14 +361,15 @@ Fix all issues found, then present to user.
 - [ ] `check_review_boxes.py --review <draft> --strict` exits 0 — recommendation confined to the editor's block, the two blocks not duplicates of each other
 - [ ] `check_review_request_types.py --review <draft> --strict` exits 0 — every Major's ask classified disclosure vs computation; each computation request justified (existing tables cannot answer it) and its estimator named; no subset-vs-parent-cohort P value requested, no new-data request
 - [ ] Impossibility claims (requires/cannot/impossible/must/contradicts) restated as premise→conclusion + counterexample-tested; reviewer-requested new statistics re-derived from the manuscript's own cells (correctness ≠ presence)
+- [ ] Finding inventory reconciled: every verified finding from the working draft (one line each, with its source) is still in the submission text or recorded as a deliberate drop with a reason — a shortening or tone pass deletes findings, not just words
 - [ ] Fatal flaw hierarchy stated in Confidential Comments (if applicable)
-- [ ] Reject recommendations (if used): §1C condition checklist (design-level flaw + speculative practical value 3-trigger + novelty gap) explicitly verified — at least 2 of 3 conditions met
-- [ ] AI/method/review Major Revision (or Reconsider) recommendations: Phase 2F contribution/value gate checked; weak novelty + weak utility not silently softened; for review articles, weak-novelty/no-distinct-contribution treated as unfixable-in-current-form (escalate toward Reject); unfixable defects govern tier over fixable list; confidential note carries no Reject-grade language left inconsistent with a softer recommendation
+- [ ] Reject recommendations (if used): each Phase 2F condition (design/validity flaw, speculative value, weak novelty) answered with evidence, and the Reject follows from Phase 2F (conditions 2 and 3 both hold, or an unfixable defect governs the tier)
+- [ ] AI/method/review Major Revision (or reconsider-tier) recommendations: Phase 2F contribution/value gate checked; weak novelty + weak utility not silently softened; for review articles, weak-novelty/no-distinct-contribution treated as unfixable-in-current-form (escalate toward Reject); unfixable defects govern tier over fixable list; confidential note carries no Reject-grade language left inconsistent with a softer recommendation
 
 ## Tone and Calibration
 
 - **Default**: Developmental, constructive, partner-voice (not gatekeeper-voice)
-- **Aczel 2021 patterns** (`references/aczel_2021_reviewer2_patterns.md`): avoid attitude markers ("reject," "absurd," "oblivious"), boosters, personal attacks on authors, vague dismissals, and typo nitpicking; prefer first-person rapport ("I appreciate," "I stumbled over"), hedged suggestions ("I'd suggest," "could," "would help"), and critique aimed at the work rather than the people. Apply throughout drafting, not just QC.
+- **Watling 2021 patterns** (`references/aczel_2021_reviewer2_patterns.md`): avoid attitude markers ("reject," "absurd," "oblivious"), boosters, personal attacks on authors, vague dismissals, and typo nitpicking; prefer first-person rapport ("I appreciate," "I stumbled over"), hedged suggestions ("I'd suggest," "could," "would help"), and critique aimed at the work rather than the people. Apply throughout drafting, not just QC.
 - **Escalate tone** only when: clinical validity threatened, patient safety concern, severe data leakage, or reference standard fundamentally flawed
 - **Default recommendation**: Major Revision (unless issues are purely reporting/clarity → Minor Revision)
 - **Fatal flaw signal**: State in Confidential Comments which issue(s) represent fundamental design limitations, rather than recommending Reject directly
@@ -417,7 +377,7 @@ Fix all issues found, then present to user.
   analyzable and still below the journal's priority bar. When weak novelty and weak clinical/research
   utility both hold, surface that in Confidential Comments and calibrate the recommendation upward from the
   default Major Revision tier.
-- **Length proportionality**: Minor Revision ≤ 600 words; Major Revision ≤ 1000 words. Length signals difficulty — a Minor Revision review longer than the manuscript itself reads as Reviewer 2.
+- **Length proportionality**: the Phase 3 tier budgets govern (a Minor Revision review sits in Tier 1). Length signals difficulty — a Minor Revision review longer than the manuscript itself reads as Reviewer 2.
 
 ## Signature Review Patterns
 
@@ -430,7 +390,7 @@ Recurring high-yield checks — apply to every manuscript:
 5. **Overclaiming**: Language should match evidence level (CI overlap, small test sets, single-center)
 6. **Reproducibility**: Preprocessing, hyperparameters, segmentation protocols reported
 
-For survival / prognostic-model manuscripts, also apply the Phase 2B 8-probe audit (conditioning, censoring, competing risks, cutoff optimism, comparator horizon alignment, C-index variant transparency, calibration beyond discrimination, estimand provenance).
+For survival / prognostic-model manuscripts, also apply the Phase 2B S1–S9 audit (conditioning, censoring, competing risks, cutoff optimism, comparator horizon alignment, C-index variant transparency, calibration beyond discrimination, estimand provenance, panel-data / multistate variance).
 
 For radiomic feature-reproducibility / phantom parameter-sweep / reliability-filtering manuscripts, also apply the Phase 2C 4-probe audit (design-grid circularity, construct validity / proxy-target gap, transportability framing with Reject-escalate calibration, multiplicity).
 
@@ -445,21 +405,21 @@ For cross-modality image-synthesis manuscripts (MRI→PET / MRI→CT / non-contr
 **Canonical source:** per-journal profile files at
 `references/reviewer_profiles/{JOURNAL_SHORTNAME}.md`
 
-In Phase 1 (Setup), after identifying the journal, read the matching profile and render its scorecard template at the top of the draft in Phase 3, above Confidential Comments to the Editor. This avoids duplicating journal form fields across multiple skills.
+In Phase 1 (Setup), after identifying the journal, read the matching profile. It carries only what the journal publishes: its review model, the comment structure from its public reviewer guide, and its reviewer-AI policy. In Phase 3, follow that structure for the two comment blocks. Recommendation options and scorecard fields differ by journal and change without notice: ask the user for them, or read them from the user's private notes, and never write them into this repository.
 
 Current profiles:
 
-| Short | Journal | System | Scorecard |
+| Short | Journal | System | Review model |
 |---|---|---|---|
-| KJR | Korean Journal of Radiology | ScholarOne | 8 items, Excellent→Poor |
-| RYAI | Radiology: Artificial Intelligence | ScholarOne | 5 items, 1–9 |
-| INSI | Insights into Imaging | Editorial Manager | 4 items, H/M/L |
-| AJR | American Journal of Roentgenology | Editorial Manager | Section-by-section |
-| EURE | European Radiology | Editorial Manager | INSI-style base |
+| KJR | Korean Journal of Radiology | ScholarOne | Double-blind |
+| RYAI | Radiology: Artificial Intelligence | ScholarOne | Double-anonymized |
+| INSI | Insights into Imaging | Editorial Manager | Single-blind |
+| AJR | American Journal of Roentgenology | Editorial Manager | Double-blind |
+| EURE | European Radiology | Editorial Manager | Single-blind |
 
 ### Custom Journal
 
-If a journal has no profile yet, use the generic format from Phase 3 and ask the user for the invitation form's scorecard fields so a new profile can be added under `reviewer_profiles/`.
+If a journal has no profile yet, use the generic format from Phase 3. A new profile under `reviewer_profiles/` is written from the journal's public pages only (see its README); form fields come from the user, not from a profile.
 
 ## Output Contract
 

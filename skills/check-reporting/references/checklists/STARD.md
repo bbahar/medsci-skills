@@ -7,8 +7,11 @@ updated list of essential items for reporting diagnostic accuracy studies. *BMJ*
 (DOI 10.1136/bmj.h5527).
 Licence: CC BY 4.0 — confirmed via the PubMed Central record (PMC4623764). Item text below is
 reproduced from the published checklist with attribution.
-Verification: all 34 rows were extracted from the published checklist and compared programmatically;
-the id set matches exactly.
+Verification: every item's text is compared word for word against Table 1 of the published statement
+(Europe PMC full text, PMC4623764), extracted without a model by
+`tests/checklist_sources/refresh_from_europepmc.py`; `verify_checklist_fidelity.py` runs the
+comparison in CI. An id-only comparison had missed the next section's heading carried into items 1
+and 2 (fixed 2026-09-30).
 
 > **What this file used to be.** It listed 30 rows ending at item 28. It **invented a split at item 8**
 > (8a/8b, where the statement has a single item), **collapsed the a/b pairs at 12, 13 and 21** into
@@ -21,13 +24,13 @@ the id set matches exactly.
 
 | # | Checklist item |
 |---|----------------|
-| 1 | Identification as a study of diagnostic accuracy using at least one measure of accuracy (such as sensitivity, specificity, predictive values, or AUC) Abstract |
+| 1 | Identification as a study of diagnostic accuracy using at least one measure of accuracy (such as sensitivity, specificity, predictive values, or AUC) |
 
 ## Abstract
 
 | # | Checklist item |
 |---|----------------|
-| 2 | Structured summary of study design, methods, results, and conclusions (for specific guidance, see STARD for Abstracts) Introduction |
+| 2 | Structured summary of study design, methods, results, and conclusions (for specific guidance, see STARD for Abstracts) |
 
 ## Introduction
 
@@ -115,6 +118,11 @@ the id set matches exactly.
 - **Items 29 and 30 are commonly dropped** — where the protocol can be accessed, and funding with the
   role of funders.
 - **Item 2** defers to STARD for Abstracts for the abstract's own requirements.
+- **Reference standard by follow-up.** When the reference standard is established by clinical or
+  imaging follow-up, its minimum follow-up duration is part of the reference-standard description
+  (item 10b), a different quantity from the item-22 interval between index test and reference
+  standard. A table footnote that blends when the index measurement was taken with the follow-up
+  that confirmed the diagnosis invites misreading; ask for the two to be stated separately.
 - For a systematic review of diagnostic accuracy studies use `PRISMA_DTA.md`; for risk of bias in the
   included studies, `QUADAS2.md`.
 

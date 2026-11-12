@@ -6,8 +6,12 @@ PROSPERO (International Prospective Register of Systematic Reviews) requires com
 a structured web form. This template provides field-by-field guidance with word limits and
 common pitfalls from real registration experience.
 
-**Key constraint**: Initial registrations are NOT allowed after data extraction is completed.
-Searching and screening may be completed.
+**Key constraint**: the form states that "Reviews that have started data extraction (at the time
+of initial submission) are not eligible for inclusion in PROSPERO. If there is later evidence that
+incorrect status and/or completion date has been supplied, the published PROSPERO record will be
+marked as retracted." Submit before the formal search, and in any case before screening begins:
+registration before screening is what lets the manuscript call the review "prospectively
+registered". An AI first-pass screen or extraction draft counts as screening or extraction.
 
 ---
 
@@ -100,13 +104,14 @@ Common tool mapping:
 | RCT | Cochrane RoB 2 |
 | Non-randomized comparative | Newcastle-Ottawa Scale (NOS) or ROBINS-I |
 | Single-arm / case series | JBI Critical Appraisal Checklist (select "Other") |
-| DTA | QUADAS-2 |
+| DTA | QUADAS-3 (QUADAS-2 for a legacy review) |
 | Prediction model | PROBAST |
 
 State number of assessors and disagreement resolution.
 
 #### 13. Reporting bias assessment
-For pooled proportion (k>=10): funnel plot + Egger's regression test.
+For pooled proportions: do not promise funnel-asymmetry or Egger/Begg tests — they are
+uninterpretable for proportions (see `single_arm_proportion_ma.md` §7).
 For comparative (k<10): funnel plot visual inspection only.
 Do NOT promise trim-and-fill or contour-enhanced funnel unless actually planned.
 
@@ -133,7 +138,7 @@ List all secondary outcomes. Include exploratory outcomes that will be "extracte
 Structure as:
 1. **Primary analysis**: model, estimator, transformation
 2. **Secondary analysis**: model, estimator, CI adjustment
-3. **Heterogeneity**: I-squared, Q test, interpretation thresholds
+3. **Heterogeneity**: τ² (estimator named), I², and the 95% prediction interval — not I² threshold labels, since I² is not an absolute measure of heterogeneity (Borenstein et al. 2017, doi:10.1002/jrsm.1230). DTA: the bivariate variance components and the 95% prediction region, not univariate I² for sensitivity and specificity
 4. **Publication bias**: methods (reference field 13)
 5. **Software**: R packages with versions
 
@@ -152,13 +157,17 @@ Mention leave-one-out if planned.
 |---|---|
 | Pilot work | Started or Completed OK |
 | Formal searching | Started or Completed OK |
-| Screening | Started or Completed OK |
-| **Data extraction** | **Not started or Started ONLY** |
+| Screening | Started or Completed OK, but the manuscript then says "registered retrospectively" |
+| **Data extraction** | **Not started** |
 | Risk of bias | Not started |
 | Data synthesis | Not started |
 
-**CRITICAL**: If data extraction is "Completed", registration will be REJECTED.
-If protocol restructuring invalidates prior extraction → defensible to mark "Not started."
+**CRITICAL**: enter the actual stage of every step on the day of submission. Extraction that was
+later discarded or redone after a protocol change still started on the day it started; marking it
+"Not started" is an incorrect status, which is the stated ground for retracting the record.
+If extraction has already begun, the review is not eligible for PROSPERO: register it with a
+registry that accepts reviews already under way (for example OSF Registries), state the actual
+stage there, and write "registered retrospectively" in the manuscript.
 
 #### 20. Review status
 Usually: "The review is planned or ongoing"
@@ -204,7 +213,8 @@ Before submitting, verify:
 - [ ] **RoB tool**: JBI requires "Other" selection (not in standard list)
 - [ ] **Certainty/GRADE**: "No" unless explicitly planned with SoF table
 - [ ] **Funding text**: Matches actual funding status
-- [ ] **Data extraction stage**: Not marked as "Completed"
+- [ ] **Review stages**: every stage entered as it actually stands today; data extraction
+      genuinely not started (an AI first-pass extraction draft counts as started)
 - [ ] **Similar records**: All reviewed and confirmed "not similar"
 - [ ] **All authors**: Listed with correct ORCID and affiliation
 - [ ] **End date**: In the future (update if past)

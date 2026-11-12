@@ -129,6 +129,9 @@ if ! command -v exiftool >/dev/null 2>&1; then
   exit 2
 fi
 
+# Count the frontmatter lines (in $fm_block, set per skill below) that match an extended regex.
+fm_count() { printf '%s\n' "$fm_block" | grep -cE "$1" || true; }
+
 if [ -n "$ONLY_SKILL" ]; then
   SKILL_DIRS=("$SKILLS_DIR/$ONLY_SKILL/")
 else
@@ -146,77 +149,72 @@ for skill_dir in "${SKILL_DIRS[@]}"; do
 
   ((TOTAL++))
   echo "[$skill_name]"
-  lines=$(wc -l < "$skill_file")
 
-  # 1. Frontmatter: required fields
-  has_name=$(head -20 "$skill_file" | grep -c "^name:" || true)
-  has_desc=$(head -20 "$skill_file" | grep -c "^description:" || true)
-  has_triggers=$(head -20 "$skill_file" | grep -c "^triggers:" || true)
-  has_tools=$(head -20 "$skill_file" | grep -c "^tools:" || true)
-  has_model=$(head -20 "$skill_file" | grep -c "^model:" || true)
+  # 1. Frontmatter: the v6 schema — name, description, and `triggers` inside the Agent Skills
+  # `metadata:` map. `model` is optional: a skill sets it only to name a real model (opus, sonnet),
+  # because leaving it out already means "the session's model" in Claude Code, and the field is not
+  # in the Agent Skills spec. Fields are read from the frontmatter block itself (the lines between the
+  # opening `---` and the next one), not the first 20 lines of the file, so a body line can never
+  # stand in for a field and `triggers:` counts only where the schema puts it.
+  fm_block=$(awk '{ sub(/\r$/, "") } NR == 1 { if ($0 != "---") exit; next } $0 == "---" { exit } { print }' "$skill_file")
+  has_name=$(fm_count '^name:')
+  has_desc=$(fm_count '^description:')
+  has_metadata=$(fm_count '^metadata:[[:space:]]*$')
+  has_tools=$(fm_count '^tools:')
+  # An indented `triggers:` between `metadata:` and the next top-level key.
+  has_meta_triggers=$(printf '%s\n' "$fm_block" | awk '/^metadata:[[:space:]]*$/ { m = 1; next } /^[^[:space:]]/ { m = 0 } m && /^[[:space:]]+triggers:/ { c++ } END { print c + 0 }')
 
-  if [ "$has_name" -ge 1 ] && [ "$has_desc" -ge 1 ] && [ "$has_triggers" -ge 1 ] && [ "$has_tools" -ge 1 ] && [ "$has_model" -ge 1 ]; then
-    pass "Frontmatter (all 5 fields)"
-  else
-    missing=""
-    [ "$has_name" -eq 0 ] && missing="$missing name"
-    [ "$has_desc" -eq 0 ] && missing="$missing description"
-    [ "$has_triggers" -eq 0 ] && missing="$missing triggers"
-    [ "$has_tools" -eq 0 ] && missing="$missing tools"
-    [ "$has_model" -eq 0 ] && missing="$missing model"
-    fail "Frontmatter missing:$missing"
-  fi
-
-  # 2. Anti-Hallucination section
-  if grep -qi "anti.hallucination\|Anti-Hallucination" "$skill_file"; then
-    pass "Anti-Hallucination section"
-  else
-    fail "Anti-Hallucination section MISSING"
-  fi
-
-  # 3. Quality gates (look for "Gate" or "user approval" or "user review")
-  gate_count=$(grep -ci "gate\|user approval\|user review\|user confirms\|present.*user" "$skill_file" || true)
-  if [ "$gate_count" -ge 3 ]; then
-    pass "Quality gates ($gate_count references)"
-  elif [ "$gate_count" -ge 1 ]; then
-    warn "Quality gates ($gate_count — recommend 3+)"
-  else
-    warn "Quality gates (0 found)"
-  fi
-
-  # 4. Line count tier
-  if [ "$lines" -ge 300 ]; then
-    pass "Size: $lines lines (HIGH tier)"
-  elif [ "$lines" -ge 150 ]; then
-    pass "Size: $lines lines (MID tier)"
-  else
-    warn "Size: $lines lines (THIN tier — consider expanding)"
-  fi
-
-  # 5. Reference file integrity
-  ref_count=0
-  ref_missing=0
-  while IFS= read -r ref_line; do
-    ref_path=$(echo "$ref_line" | grep -oE '\$\{SKILL_DIR\}/references/[^ `*),]+' | head -1 | sed "s|\${SKILL_DIR}|${skill_dir%/}|" | sed 's/[`\*]//g' || true)
-    if [ -n "$ref_path" ]; then
-      ((ref_count++))
-      if [ ! -f "$ref_path" ] && [ ! -d "$ref_path" ]; then
-        # Try without trailing characters
-        clean_path=$(echo "$ref_path" | sed 's/[,;]$//')
-        if [ ! -f "$clean_path" ] && [ ! -d "$clean_path" ]; then
-          ((ref_missing++))
-        fi
-      fi
+  # A v6 compatibility alias (scripts/skill_aliases.py) is a SKILL.md-only redirect the model is
+  # told never to pick on its own: name + description + disable-model-invocation, and deliberately
+  # NO triggers/model — triggers on a stub would route requests to it. Its shape is held
+  # strict here (target and declaration by skill_aliases.py), not waved through.
+  if python3 "$REPO_ROOT/scripts/skill_aliases.py" --is-alias "$skill_dir"; then
+    stub_extra=$(find "$skill_dir" -type f ! -name SKILL.md ! -path '*/__pycache__/*' | head -1)
+    if [ "$has_name" -ge 1 ] && [ "$has_desc" -ge 1 ] && [ -z "$stub_extra" ]; then
+      pass "Alias stub (name + description + disable-model-invocation; SKILL.md only)"
+    else
+      fail "Alias stub malformed (needs name + description; SKILL.md must be its only file${stub_extra:+, found ${stub_extra#"$skill_dir"}})"
     fi
-  done < <(grep 'SKILL_DIR.*references' "$skill_file" || true)
-
-  if [ "$ref_count" -eq 0 ]; then
-    pass "References: none declared"
-  elif [ "$ref_missing" -eq 0 ]; then
-    pass "References: $ref_count declared, all found"
   else
-    fail "References: $ref_missing of $ref_count missing"
+    if [ "$has_name" -ge 1 ] && [ "$has_desc" -ge 1 ] && [ "$has_metadata" -ge 1 ] && [ "$has_meta_triggers" -ge 1 ]; then
+      pass "Frontmatter (name, description, metadata.triggers)"
+    else
+      missing=""
+      [ "$has_name" -eq 0 ] && missing="$missing name"
+      [ "$has_desc" -eq 0 ] && missing="$missing description"
+      [ "$has_metadata" -eq 0 ] && missing="$missing metadata"
+      [ "$has_meta_triggers" -eq 0 ] && missing="$missing metadata.triggers"
+      fail "Frontmatter missing:$missing"
+    fi
+    # `tools` left the schema in v6: hosts ignore it. It must not come back as `allowed-tools`
+    # either, which pre-approves the listed tools instead of describing them.
+    if [ "$has_tools" -ge 1 ]; then
+      fail "Frontmatter has a top-level tools: field (removed in v6; delete it, do not rename it to allowed-tools)"
+    fi
+    # The model chooses a skill from its description; the schema caps it at 300 characters.
+    # Measured on the parsed value (folded `>` blocks joined, quotes stripped) by the same reader
+    # skill_aliases.py uses. A value that cannot be measured fails rather than passing as 0.
+    desc_len=$(python3 -c 'import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); from skill_aliases import frontmatter; print(len(frontmatter(Path(sys.argv[2])).get("description", "")))' "$REPO_ROOT/scripts" "$skill_file" 2>/dev/null)
+    case "$desc_len" in
+      ''|*[!0-9]*) fail "Description length could not be measured" ;;
+      *) if [ "$desc_len" -gt 300 ]; then
+           fail "Description is $desc_len characters (max 300)"
+         else
+           pass "Description length ($desc_len/300 characters)"
+         fi ;;
+    esac
   fi
+
+  # (Former checks 2-4 removed 2026-09-30: a required "Anti-Hallucination" heading, a quota of
+  #  "gate" words, and a size tier that warned "THIN — consider expanding" under 150 lines. They
+  #  rewarded boilerplate and length, the opposite of what a skill should carry; the upper bound
+  #  lives in check_phase_budget.py.)
+
+  # (Former check 5 removed 2026-10-04: it matched only `${SKILL_DIR}/references/...`, a form no
+  #  SKILL.md uses since orchestrate moved to `${CLAUDE_SKILL_DIR}`, so it reported "none declared"
+  #  for every skill. Asset paths are checked by scripts/validate_routing_assets.py --strict, which
+  #  CI runs: every `${CLAUDE_SKILL_DIR}/...` path with a file extension. `--only` does not call it;
+  #  scope it locally with `validate_routing_assets.py --strict --scan skills/<name>/SKILL.md`.)
 
   # ---------------- Content Integrity (v2 lints) ----------------
   # Scope: every tracked .md inside the skill directory (SKILL.md + references/
@@ -305,7 +303,7 @@ for skill_dir in "${SKILL_DIRS[@]}"; do
     hit=$(python3 "$CHECK_PRECEDENT" "$f"); rc=$?
     rel="${f#$REPO_ROOT/}"
     if [ "$rc" -eq 3 ]; then
-      fail "Personal precedent in $rel: $hit"
+      fail "Personal precedent in $rel: line ${hit%%:*}"
       ((precedent_hits++))
     elif [ "$rc" -ne 0 ]; then
       fail "check_precedent.py error on $rel (rc=$rc)"
@@ -323,7 +321,7 @@ for skill_dir in "${SKILL_DIRS[@]}"; do
     hit=$(_personal_path_hit < "$f")
     if [ -n "$hit" ]; then
       rel="${f#$REPO_ROOT/}"
-      fail "Personal path in $rel: $hit"
+      fail "Personal path in $rel: line ${hit%%:*}"
       ((path_hits++))
     fi
   done
@@ -375,14 +373,14 @@ for skill_dir in "${SKILL_DIRS[@]}"; do
   PII_FIXTURE_PATHS='^skills/deidentify/tests/test_phi_[a-z]+\.csv$|^skills/contribute/tests/test_contribution_safety\.sh$'
   for f in "${integrity_files[@]}"; do
     rel_f="${f#$REPO_ROOT/}"
-    if printf '%s' "$rel_f" | grep -qE "$PII_FIXTURE_PATHS"; then
+    if grep -qE "$PII_FIXTURE_PATHS" <<<"$rel_f"; then
       continue
     fi
     matches=$(grep -nE "$email_pattern" "$f" | grep -vE "$email_whitelist" || true)
     if [ -n "$matches" ]; then
       rel="${f#$REPO_ROOT/}"
       first=$(echo "$matches" | head -1)
-      fail "Real email leak in $rel: $first"
+      fail "Real email leak in $rel: line ${first%%:*}"
       ((email_hits++))
     fi
   done
@@ -415,7 +413,7 @@ for skill_dir in "${SKILL_DIRS[@]}"; do
   filename_allow='^(Issue|Year|Vol|Table|Figure|Sample|Example|Demo|Test|Type|Class|Group|Cohort|Study|Trial|Phase|Run|Batch|Round|Stage|Step|Item|Mode)[0-9]{4}_'
   while IFS= read -r -d '' f; do
     base=$(basename "$f")
-    if echo "$base" | grep -qE "$filename_pattern" && ! echo "$base" | grep -qE "$filename_allow"; then
+    if grep -qE "$filename_pattern" <<<"$base" && ! grep -qE "$filename_allow" <<<"$base"; then
       rel="${f#$REPO_ROOT/}"
       fail "Author-style filename in $rel: $base"
       ((filename_hits++))
@@ -432,7 +430,7 @@ for skill_dir in "${SKILL_DIRS[@]}"; do
     if [ -n "$matched" ]; then
       rel="${f#$REPO_ROOT/}"
       first=$(echo "$matched" | head -1)
-      fail "Dated precedent blockquote in $rel: $first"
+      fail "Dated precedent blockquote in $rel: line ${first%%:*}"
       ((blockdate_hits++))
     fi
   done
@@ -492,7 +490,7 @@ PY
     first=$(echo "$korean_lines" | head -1)
     # WARN-only: Korean-native SKILL.md migration is a separate translation task.
     # Precedent/path/blockquote rules (6-8) remain FAIL to block regressions.
-    warn "Korean prose in SKILL.md: $count line(s), first $first"
+    warn "Korean prose in SKILL.md: $count line(s), first at line ${first%%:*}"
   fi
 
   # 10. Binary EXIF metadata scan (DOCX / PPTX / XLSX / PDF / PNG / JPG / TIFF).
@@ -535,7 +533,7 @@ PY
       printf '%s' "$line" | python3 "$CHECK_PRECEDENT" - >/dev/null 2>&1 || _exif_rc=$?
       if [ "$_exif_rc" -eq 3 ]; then
         rel="${current_file#$REPO_ROOT/}"
-        fail "Binary EXIF PII in $rel: $line"
+        fail "Binary EXIF PII in $rel: field ${line%%:*}"
         ((exif_hits++))
       fi
     done <<< "$exif_dump"
@@ -588,13 +586,13 @@ while IFS= read -r rel; do
   [ -f "$f" ] || continue
   ((META_SCANNED++))
   scan_src=$(cat "$f")
-  if echo "$rel" | grep -qE "$AUTHOR_ATTRIB_RE"; then
+  if grep -qE "$AUTHOR_ATTRIB_RE" <<<"$rel"; then
     precedent_hit=$(printf '%s' "$scan_src" | python3 "$CHECK_PRECEDENT" --allow-author -); precedent_rc=$?
   else
     precedent_hit=$(printf '%s' "$scan_src" | python3 "$CHECK_PRECEDENT" -); precedent_rc=$?
   fi
   if [ "$precedent_rc" -eq 3 ]; then
-    fail "Personal precedent in $rel: $precedent_hit"
+    fail "Personal precedent in $rel: line ${precedent_hit%%:*}"
     ((META_FAIL++))
   elif [ "$precedent_rc" -ne 0 ]; then
     fail "check_precedent.py error on $rel (rc=$precedent_rc)"
@@ -602,16 +600,17 @@ while IFS= read -r rel; do
   fi
   hit=$(printf '%s\n' "$scan_src" | _personal_path_hit)
   if [ -n "$hit" ]; then
-    fail "Personal path in $rel: $hit"
+    fail "Personal path in $rel: line ${hit%%:*}"
     ((META_FAIL++))
   fi
   matches=$(echo "$scan_src" | grep -nE "$email_pattern" | grep -vE "$email_whitelist" || true)
   if [ -n "$matches" ]; then
     first=$(echo "$matches" | head -1)
-    fail "Real email leak in $rel: $first"
+    fail "Real email leak in $rel: line ${first%%:*}"
     ((META_FAIL++))
   fi
-done < <(git -C "$REPO_ROOT" ls-files -- '*.md' '*.yml' '*.yaml' '*.json' '*.cff' '*.bib' '*.txt' '*.csv' '*.tsv' '*.py' '*.sh')
+done < <(git -C "$REPO_ROOT" ls-files -- '*.md' '*.yml' '*.yaml' '*.json' '*.jsonl' '*.jsonld' '*.cff' '*.bib' '*.txt' '*.csv' '*.tsv' '*.py' '*.sh' \
+  '*.R' '*.qmd' '*.js' '*.ps1' '*.cmd' '*.command' '*.template' '*.svg' '*.xml' '*.tape')
 
 # The public surface also contains demonstration Word documents. Reuse the
 # submission scanner's package-level path check, including custom properties
