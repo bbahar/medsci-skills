@@ -2,9 +2,9 @@
 
 # meta-analysis
 
-> Systematic review and meta-analysis pipeline for medical research. Covers protocol registration (PROSPERO), search strategy, screening, data extraction, risk of bias assessment (QUADAS-2/ROBINS-I), statistical synthesis (bivariate/HSROC for DTA, random-effects for intervention), and PRISMA-compliant reporting. Supports both DTA and intervention meta-analyses.
+> Use when running a systematic review and meta-analysis, DTA or intervention. Covers PROSPERO protocol, search, screening, extraction, risk of bias (QUADAS-3, RoB 2, ROBINS-I), bivariate/HSROC or random-effects pooling, forest plots, heterogeneity and PRISMA reporting. Topic scouting is /ma-scout.
 
-**Invoke:** `/meta-analysis` · **Tools:** Read, Write, Edit, Bash, Grep, Glob · **Model:** inherit
+**Invoke:** `/meta-analysis`
 
 ## When to use
 
@@ -30,6 +30,7 @@
 - `python3 scripts/check_pool_consistency.py`
 - `bash scripts/extract_assist_challenge/verify.sh  # deterministic, network-free`
 - `bash scripts/check_exclusion_code_validity_challenge/verify.sh  # deterministic, network-free`
+- `bash scripts/check_ratio_ci_symmetry_challenge/verify.sh  # deterministic, network-free`
 
 **Evidence** — `demo`
 
@@ -61,11 +62,16 @@
 - `check_exclusion_code_validity.py`
 - `check_exclusion_code_validity_challenge/` (6 files)
 - `check_pool_consistency.py`
+- `check_ratio_ci_symmetry.py`
+- `check_ratio_ci_symmetry_challenge/` (4 files)
 - `cohort_overlap_check.py`
 - `dta_extraction_qc.py`
 - `extract_assist.py`
 - `extract_assist_challenge/` (6 files)
+- `extraction_consensus_log_init.py`
+- `prisma_5way_consistency.py`
 - `screening_reconcile.py`
+- `tag_cleanup_gate.sh`
 
 **Templates** (`skills/meta-analysis/templates/`):
 

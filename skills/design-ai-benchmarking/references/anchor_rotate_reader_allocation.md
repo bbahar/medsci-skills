@@ -1,4 +1,4 @@
-# Reader allocation under burden constraints — anchor-and-rotate (incomplete-block)
+# Reader allocation under burden constraints — anchor-and-rotate (incomplete blocks)
 
 A reviewer panel that must rate many items often cannot have **every reader rate every
 item**: a per-reader session cap (time/fatigue) bounds how many items one reader can score.
@@ -6,16 +6,21 @@ Forcing full overlap caps the *total* item pool at the per-reader cap, which thr
 coverage. This note gives a deterministic allocation that keeps per-reader burden bounded
 while expanding total coverage, and still yields inter-rater reliability.
 
-This complements the reliability plan (set ICC / weighted-kappa targets; report reliability
-on planted control items separately). It does **not** compute agreement statistics — carry
-the resulting rating records into `/analyze-stats` for ICC / kappa / agreement sample size.
+This complements the reliability plan (set an ICC target with its form stated, or a
+Krippendorff's α target for ordinal ratings — weighted kappa is a two-rater statistic; planted
+control items are a competence check, not reliability evidence). It does **not** compute
+agreement statistics — carry the resulting rating records into `/analyze-stats` for ICC / α /
+agreement sample size.
 
 ## The design
 
-A **balanced-incomplete-block** layout with two strata:
+An **anchor set plus rotating incomplete blocks**, in two strata. It is not a balanced
+incomplete block design: reader pairs are not co-rated equally often.
 
-- **Anchor set** (size `A`): rated by **all** readers → carries the inter-rater ICC/kappa
-  (and, if you plant calibration probes, the control-item reliability).
+- **Anchor set** (size `A`): real, representative items rated by **all** readers — a fully
+  crossed block, so it carries the inter-rater reliability: ICC with its form stated (e.g.
+  ICC(2,1)) or Krippendorff's α for ordinal ratings, with a 95% CI. Planted calibration probes
+  may sit among the anchors, but they yield only a competence hit rate, not reliability.
 - **Rotating unique blocks**: the remaining `pool - A` items are split into per-reader
   blocks of size `cap - A`, distributed across readers so each unique item is seen by
   `m` raters on average. This grows the total pool **independently of the per-reader cap**.
@@ -29,26 +34,34 @@ A **balanced-incomplete-block** layout with two strata:
 ### Formulas
 ```
 rot_budget        = cap - A                      # each reader's rotating (unique) slots; must be > 0
-unique            = pool - A
-R (readers)       = ceil(m * unique / rot_budget) # readers needed for ~m raters per unique item
-reads_per_reader  = A + rot_budget  (= cap)
-raters_per_unique = R * rot_budget / unique
+unique            = pool - A                     # must be > 0 (pool > A); m must be >= 1
+R (readers)       = max(m, ceil(m * unique / rot_budget)) # ~m raters per unique item, never < m
+reads_per_reader  = A + min(rot_budget, unique)  # (= cap unless unique < rot_budget)
+raters_per_unique = min(R, R * rot_budget / unique) # an item cannot have more raters than readers
 anchor_reads      = R * A                          # reliability strength on the anchor set
 ```
+When `unique < rot_budget` every reader rates every item: the design is fully crossed and
+rotation is not needed.
 
 ### Reverse (the usually-binding question)
 Given **R available readers** (expert raters are typically the scarce resource), the largest
 unique pool you can evaluate at `m` raters/item is:
 ```
-max_pool = A + (R * (cap - A)) // m
+max_pool = A + (R * (cap - A)) // m            # requires R >= m: m distinct raters need m readers
 ```
 This is the real ceiling: with a small expert panel, total feature-scored coverage is small.
 Curate the must-rate item set to fit `max_pool` rather than assuming the cap is per-study.
 
 ## Trade-off (report honestly)
-- Anchor items get all `R` raters → strong, reportable ICC/kappa.
-- Unique (non-anchor) items get only ~`m` raters → usable for **point estimates**, weaker
-  per-item reliability. Report anchor-set reliability and unique-item coverage **separately**.
+- Anchor items get all `R` raters → the reportable reliability estimate (ICC with stated form
+  and 95% CI). Its precision depends mainly on the number of anchor items `A`, not on `R`, so
+  20 anchors give a wide interval: size `A` for the CI width you need (Koo & Li, *J Chiropr Med*
+  2016), not for the per-reader cap alone.
+- Unique (non-anchor) items get only ~`m` raters, a different subset per item → a
+  non-fully-crossed design, usable for **point estimates**; if reliability is estimated there,
+  use a one-way ICC(1) or a generalizability-theory model that respects the rating design (Putka
+  et al., *J Appl Psychol* 2008). Report anchor-set reliability and unique-item coverage
+  **separately**.
 - The per-reader cap is **per session, not per study**: rotation decouples total coverage from
   the cap. The binding constraint is usually the **number of available expert readers**, not
   the item count.
@@ -58,7 +71,14 @@ Curate the must-rate item set to fit `max_pool` rather than assuming the cap is 
 import math
 
 def plan(cap, pool, anchor, m):
-    """Anchor-and-rotate allocation. Returns readers needed + per-reader load, or None if infeasible."""
+    """Anchor-and-rotate allocation. Returns readers needed + per-reader load, or None if infeasible.
+
+    Raises ValueError on input no allocation can satisfy (anchor < 0, m < 1, pool <= anchor).
+    """
+    if anchor < 0 or m < 1:
+        raise ValueError(f"need anchor >= 0 and m >= 1 (got anchor={anchor}, m={m})")
+    if pool <= anchor:
+        raise ValueError(f"pool ({pool}) must exceed anchor ({anchor}): no rotating items")
     rot = cap - anchor
     if rot <= 0:
         return None  # anchor >= cap: no room to rotate
@@ -66,19 +86,26 @@ def plan(cap, pool, anchor, m):
     R = max(m, math.ceil(m * unique / rot))
     return {
         "readers": R,
-        "reads_per_reader": anchor + rot,           # == cap
-        "raters_per_unique": (R * rot) / unique if unique else float("inf"),
+        "reads_per_reader": anchor + min(rot, unique),  # < cap when unique < rot
+        "raters_per_unique": min(R, (R * rot) / unique),  # at most one rating per reader
         "anchor_reads": R * anchor,
         "within_cap": (anchor + rot) <= cap,
     }
 
 def max_pool_for_readers(cap, anchor, m, R):
-    """Reverse: largest unique pool for R available readers at m raters/item."""
+    """Reverse: largest unique pool for R available readers at m raters/item.
+
+    Raises ValueError when anchor < 0, m < 1, or R < m (m distinct raters need m readers).
+    """
+    if anchor < 0 or m < 1:
+        raise ValueError(f"need anchor >= 0 and m >= 1 (got anchor={anchor}, m={m})")
+    if R < m:
+        raise ValueError(f"R ({R}) readers cannot give m ({m}) distinct raters per item")
     rot = cap - anchor
     return None if rot <= 0 else anchor + (R * rot) // m
 
 # Example: cap=30 items/expert/session, anchor=20, target 2 raters/unique item.
-# With only 4-8 expert readers, max feature-scored pool is ~40-70 items — curate to fit.
+# With only 4-8 expert readers, max feature-scored pool is 40-60 items — curate to fit.
 ```
 
 ## When to use / cautions

@@ -10,7 +10,7 @@ same four moves a strong review makes:
 1. **Anchor** — name the exact location (section, figure/table, page) the concern sits in.
 2. **State the gap** — what is claimed vs what the evidence supports, concretely.
 3. **Phrase it as a partner** — hedged, first-person, critique-the-work-not-the-author
-   (Aczel-compliant: "I'd suggest…", "it would help to…", never "the authors fail to…").
+   (Watling-compliant: "I'd suggest…", "it would help to…", never "the authors fail to…").
 4. **Calibrate severity** — when the finding is design-level it becomes Major #1; when it
    is fixable-as-reported it stays a Minor; the example says which and why.
 
@@ -34,6 +34,8 @@ models, authored from scratch**, not extracted from any published review.
   class rebalancing.
 - `selective_outcome_reporting.md` — a reported trial primary outcome that differs from
   the registered/protocol primary, or outcomes dropped/added without a disclosed amendment.
+- `comparator_adequacy.md` — an added-value claim whose comparator is absent, trivial,
+  outdated, or answering a different question, so the reported gain is uninterpretable.
 
 ## Curator guidelines (for adding more)
 

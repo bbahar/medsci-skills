@@ -12,8 +12,9 @@ Environment variable required:
     GEMINI_API_KEY
 """
 
+from __future__ import annotations
+
 import argparse
-import base64
 import os
 import sys
 from pathlib import Path

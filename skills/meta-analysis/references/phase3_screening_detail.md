@@ -123,6 +123,48 @@ cross its own significance threshold once the pool is corrected, which is how mu
 Note the shape: every count in the submitted manuscript reconciles, because each was recomputed from
 an artifact the lost studies had already dropped out of.
 
+##### 3f gate verdicts and known limits
+
+- **Exclusion codes:** `CODE_CONTRADICTS_ELIGIBILITY` (a code excludes a design the protocol
+  includes), `CODE_NOT_REGISTERED` (off-protocol code), `CODE_RENUMBERED` (same code, two
+  meanings); `NOT_ASSESSED` = no code column found (pass `--code-col`).
+- **PRISMA 5-way** checks the SSOT flow arithmetic and CSV record counts; on prose surfaces it can
+  only find a number missing. A number present ("12 studies" or "12 months") is `NOT_ASSESSED`,
+  never OK (`--strict` exits 3): read those sentences. Flow identities that the SSOT cannot decide
+  are `NOT_ASSESSED`, not FAIL: a PRISMA 2009 flow needs
+  `deduplication.other_sources_before_dedup`; `full_text_assessed - full_text_excluded` is strict
+  only against a declared `included.reports` (one study may have several reports, and one report
+  several studies, e.g. DTA cohorts); `included.reports < included.k` is flagged for reading, not
+  failed; a sum of exclusion reasons above `full_text_excluded` (several reasons per report) is
+  `NOT_ASSESSED`, below it a FAIL.
+  The step `after_dedup -> full_text_assessed` is not checked: the SSOT has no key for records
+  removed before screening (automation tools, other reasons) in a PRISMA 2020 flow.
+- **PRISMA 2020 report counts (optional `prisma2020:` section).** Declare `records_screened`,
+  `reports_sought`, `reports_not_retrieved`, `reports_assessed`, `reports_excluded`,
+  `reports_excluded_reasons`, `reports_included`, `other_reports_included` and `studies_included`
+  to have the gate check `records_screened - title_abstract_excluded = reports_sought`,
+  `reports_sought - reports_not_retrieved = reports_assessed`,
+  `reports_assessed - reports_excluded + other_reports_included = reports_included`, the reasons
+  sum against `reports_excluded`, and `studies_included <= reports_included`. The counts are the
+  databases/registers column, except `reports_included` and `studies_included`, which are the review
+  totals; `other_reports_included` is the part of `reports_included` found by other methods
+  (citation searching, websites) or carried over from a previous version. Without it, a
+  `reports_included` above `assessed - excluded` is `NOT_ASSESSED` and one below it a FAIL.
+  These keys do not tie `reports_assessed` to `screening.full_text_assessed`, so
+  `after_dedup -> full_text_assessed` stays unchecked. A broken identity among declared
+  counts is a FAIL. An identity with an undeclared term is `NOT_ASSESSED`, naming the term;
+  without `records_screened`, `after_dedup` stands in and a mismatch is `NOT_ASSESSED`. A reasons
+  sum above `reports_excluded`, or more studies than reports, is `NOT_ASSESSED` (several reasons
+  per report; several studies per report). These keys are not surface numbers, an unknown key
+  exits 2, and an SSOT without the section is reported exactly as before.
+- **Screening labels** must be one decision word (`Yes - include` exits 2, label named); a blank
+  decision cell exits 2 as `<blank>`.
+- **Record IDs** are compared verbatim across screening and consensus, so `#12` vs `12` reads as
+  `STAGE_TRANSFER_LOSS`; the issue names the likely ID-style pair (`likely_id_style_mismatch`).
+  Table 1 IDs also match a record that differs only in case, spacing or punctuation
+  (`Smith 2020` → `Smith2020`); a Table 1 ID whose digit run is shared by any screened record
+  stays unmatched and is reported.
+
 #### 3f.5 Pool composition lock (MANDATORY at adjudication freeze)
 
 After Phase 3f reconciliation passes, freeze the pool composition into a

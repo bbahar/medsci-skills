@@ -44,11 +44,12 @@ MD
 # The submission ID is ASSEMBLED, never written out: a file whose job is to carry identifier-shaped
 # strings must not carry one as a literal, or the repo's own precedent gate flags the test that
 # proves the gate works. Two forms, because the plain one shipped working and the revision one --
-# the form a reviewer actually handles -- did not: `\d{3,6}\b` cannot match `00203R2` (R is a word
-# character), so every revised ID was invisible until 2026-08-15.
-J=EURE; Y=26
-printf 'I was reviewing %s-D-%s-00203 when this happened.\n' "$J" "$Y" >> "$TMP/leaky.md"
-printf 'and %s-D-%s-00203R2 the round after that.\n' "$J" "$Y" >> "$TMP/leaky.md"
+# the form a reviewer actually handles -- did not: `\d{3,6}\b` cannot match `00001R2` (R is a word
+# character), so every revised ID was invisible until 2026-08-15. The journal code is not a real
+# journal's.
+J=ZZZZ; Y=99
+printf 'I was reviewing %s-D-%s-00001 when this happened.\n' "$J" "$Y" >> "$TMP/leaky.md"
+printf 'and %s-D-%s-00001R2 the round after that.\n' "$J" "$Y" >> "$TMP/leaky.md"
 
 # --- an ordinary, entirely publishable contribution -------------------------------------------
 cat > "$TMP/clean.md" <<'MD'
@@ -85,14 +86,13 @@ ck "MRN, national ID, IRB, manuscript ID, name, path all caught" 0 "$?"
 # 1b) BOTH submission-ID forms, because only one of them used to work.
 #
 # The plain form was caught from the day this shipped. The revision form was not: `\d{3,6}\b`
-# cannot match `00203R2`, since R is a word character and there is no boundary before it. Revised
-# IDs are the ones a reviewer handles most, and one had been sitting in a shipped reviewer profile
-# in this repository while the scanner reported the file clean.
+# cannot match `00001R2`, since R is a word character and there is no boundary before it. Revised
+# IDs are the ones a reviewer handles most, so missing them is the expensive miss.
 python3 - "$TMP/leaky.json" <<'PY'
 import json, sys
 found = {f["match"] for f in json.load(open(sys.argv[1]))["findings"]
          if f["verdict"] == "MANUSCRIPT_ID"}
-assert any(x.endswith("00203") for x in found), f"plain submission ID missed: {found}"
+assert any(x.endswith("00001") for x in found), f"plain submission ID missed: {found}"
 assert any(x.endswith("R2") for x in found), f"REVISED submission ID missed: {found}"
 PY
 ck "both the plain and the revised submission-ID forms are caught" 0 "$?"
@@ -307,6 +307,120 @@ cfg = json.load(open(sys.argv[1]))
 assert cfg.get("star_note_shown") is True, cfg
 PY
 ck "showing it once is recorded (never asked twice)" 0 "$?"
+
+# --- 11) A credential with a hyphenated prefix, or a Google key, is still a credential --------
+# `sk-[A-Za-z0-9]{16,}` stops at the second hyphen, so Anthropic (`sk-ant-...`) and OpenAI project
+# (`sk-proj-...`) keys -- the ones a Claude Code user is most likely to hold -- passed as clean, and
+# `AIza...` had no rule at all. Keys are ASSEMBLED at runtime: no literal key shape lives in this file.
+FILL="AbCdEfGhIjKlMnOpQrStUvWxYz0123456789"
+for pre in "sk-ant-api03-" "sk-proj-" "AIza"; do
+  printf 'export API_KEY=%s%s\n' "$pre" "$FILL" > "$TMP/key.md"
+  python3 "$S" --text "$TMP/key.md" --out "$TMP/key.json" --quiet > /dev/null 2>&1
+  ck "a ${pre}... key blocks" 1 "$?"
+  python3 - "$TMP/key.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+f = [x for x in r["findings"] if x["verdict"] == "SECRET"]
+assert f and f[0]["severity"] == "blocker", r["findings"]
+assert "AbCdEfGhIjKlMnOp" not in f[0]["match"], "the scanner must not reprint the whole key"
+PY
+  ck "...as a truncated SECRET blocker (${pre})" 0 "$?"
+done
+# negative control: hyphenated prose and short look-alikes are not keys
+cat > "$TMP/notkey.md" <<'MD'
+Use a risk-adjusted, task-specific model (scikit-learn); see the desk-proj-notes and sk-ant.
+The AIza prefix identifies a Google key; AIzawl is a place name.
+MD
+python3 "$S" --text "$TMP/notkey.md" --quiet > /dev/null 2>&1
+ck "hyphenated prose and short key look-alikes are not flagged" 0 "$?"
+
+# --- 12) The verdict is bound to the payload ---------------------------------------------------
+# submit_contribution.py used to trust any safety.json that said safe_to_send: a binary file was
+# skipped by the scan (0 files scanned -> "safe") yet copied by the PR rung, and a safety.json
+# written by `--text other.md` -- or before a later edit -- cleared a payload it never saw.
+SUB="$REPO_ROOT/skills/contribute/scripts/submit_contribution.py"
+W="$TMP/work"; SK="$TMP/skillsrc"
+mkdir -p "$W" "$SK/find-journal/references"
+mkchanges() {  # $1 = output json, rest = files under $SK/find-journal/references
+  local out="$1"; shift
+  python3 - "$out" "$SK" "$@" <<'PY'
+import json, sys
+out, sk, names = sys.argv[1], sys.argv[2], sys.argv[3:]
+ch = [{"skill": "find-journal", "path": f"references/{n}", "kind": "added",
+       "abs": f"{sk}/find-journal/references/{n}",
+       "text": not n.endswith(".bin")} for n in names]  # as find_local_changes marks it
+json.dump({"changes": ch, "n_changes": len(ch)}, open(out, "w"))
+PY
+}
+submit() {  # run the dry-run issue rung with no GitHub CLI, from $W
+  (cd "$W" && rm -f qc/contribution.patch && PATH="$NOGH" "$PY" "$SUB" --changes "$1" --safety "$2" \
+     --title "t" --issue-only --dry-run > /dev/null 2>&1)
+}
+
+# 12a) negative control: a clean text contribution is scanned, bound, and goes through
+printf '# My journal\nWord limit: 3,000 words.\n' > "$SK/find-journal/references/ok.md"
+mkchanges "$W/ok.json" ok.md
+python3 "$S" --changes "$W/ok.json" --out "$W/ok_safety.json" --quiet > /dev/null 2>&1
+ck "a clean contribution passes the scan" 0 "$?"
+python3 - "$W/ok_safety.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+assert r["safe_to_send"] is True and r["mode"] == "changes", r
+assert [f["file"] for f in r["files"]] == ["find-journal/references/ok.md"], r["files"]
+assert len(r["files"][0]["sha256"]) == 64 and r["unscanned"] == []
+PY
+ck "...and safety.json records the file's sha256" 0 "$?"
+submit "$W/ok.json" "$W/ok_safety.json"
+ck "submit accepts a scan that covers exactly the payload" 0 "$?"
+[ -f "$W/qc/contribution.patch" ]
+ck "...and writes the patch" 0 "$?"
+
+# 12b) a binary file is not scanned, so it is never "safe"
+printf 'patient MRN 4471903\n\377\376\000binary' > "$SK/find-journal/references/scan.bin"
+mkchanges "$W/bin.json" scan.bin
+python3 "$S" --changes "$W/bin.json" --out "$W/bin_safety.json" --quiet > /dev/null 2>&1
+ck "a binary file in the payload fails the scan" 1 "$?"
+python3 - "$W/bin_safety.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+assert r["safe_to_send"] is False, r
+assert [u["file"] for u in r["unscanned"]] == ["find-journal/references/scan.bin"], r["unscanned"]
+PY
+ck "...is listed as unscanned, and safe_to_send is false" 0 "$?"
+submit "$W/bin.json" "$W/bin_safety.json"
+ck "submit refuses a payload with an unscanned binary file" 1 "$?"
+
+# 12c) a safety.json from an unrelated --text scan clears nothing
+printf 'The pipeline failed on patient MRN 4471903.\n' > "$SK/find-journal/references/leak.md"
+mkchanges "$W/leak.json" leak.md
+printf 'nothing here\n' > "$W/other.md"
+python3 "$S" --text "$W/other.md" --out "$W/other_safety.json" --quiet > /dev/null 2>&1
+ck "(setup) the unrelated file scans clean" 0 "$?"
+submit "$W/leak.json" "$W/other_safety.json"
+ck "submit refuses a safety.json made from another file" 1 "$?"
+[ ! -f "$W/qc/contribution.patch" ]
+ck "...and writes no patch" 0 "$?"
+
+# 12d) a file edited after its clean scan is refused (stale safety.json)
+cp "$SK/find-journal/references/ok.md" "$TMP/ok.bak"
+printf 'patient MRN 4471903\n' >> "$SK/find-journal/references/ok.md"
+submit "$W/ok.json" "$W/ok_safety.json"
+ck "submit refuses a file changed since the scan" 1 "$?"
+cp "$TMP/ok.bak" "$SK/find-journal/references/ok.md"
+
+# 12e) a file added to the payload after the scan is refused
+printf 'Abstract: 250 words.\n' > "$SK/find-journal/references/ok2.md"
+mkchanges "$W/ok2.json" ok.md ok2.md
+submit "$W/ok2.json" "$W/ok_safety.json"
+ck "submit refuses a file the scan never covered" 1 "$?"
+
+# 12f) unrecognisable input is named, exit 2 -- never a silent 0-file pass
+printf '{"not": "a changes report"}\n' > "$W/junk.json"
+python3 "$S" --changes "$W/junk.json" --quiet > /dev/null 2>&1
+ck "the scan rejects an unrecognised --changes file" 2 "$?"
+printf '{"safe_to_send": true, "blockers": 0}\n' > "$W/old_safety.json"
+submit "$W/ok.json" "$W/old_safety.json"
+ck "submit rejects a safety.json with no file hashes" 2 "$?"
 
 echo "----"
 echo "test_contribution_safety: $pass passed, $fail failed"

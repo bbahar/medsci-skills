@@ -11,12 +11,15 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import html
 import json
 import os
 import re
 import sys
 import time
+import unicodedata
+import urllib.error
 import urllib.parse
 import urllib.request
 import zipfile
@@ -25,7 +28,12 @@ from pathlib import Path
 from xml.etree import ElementTree as ET
 
 
-DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:A-Z0-9]+\b", re.I)
+# `<>` belong to legacy SICI DOIs (10.1002/(SICI)...17:8<857::AID-SIM777>3.0.CO;2-E), whose
+# check character after `;2-` can also be `#`. Without them a text reference's DOI was cut
+# short, and a cut DOI is not registered anywhere, which the doi.org check below would
+# report as FABRICATED.
+DOI_RE = re.compile(r"\b10\.\d{4,9}/[-._;()/:<>A-Z0-9]+(?:(?<=;2-)#|\b)", re.I)
+WELL_FORMED_DOI_RE = re.compile(r"^10\.\d{4,9}/\S+$")
 PMID_RE = re.compile(r"\bPMID\s*:?\s*(\d{5,9})\b", re.I)
 YEAR_RE = re.compile(r"\b(19|20)\d{2}\b")
 
@@ -63,6 +71,11 @@ class RefRecord:
     # must not fire MISMATCH (which would abort render on every guideline-citing
     # cohort manuscript).
     corporate_author: bool = False
+    # True when title_guess came from a title field (BibTeX `title`, a TSV title column). Only
+    # such a title is compared with the record a DOI/PMID resolves to: a title guessed from a
+    # plain-text reference line is often the author list, and comparing it would turn clean
+    # references into MISMATCH.
+    title_from_field: bool = False
     status: str = "UNVERIFIED"
     evidence: str = ""
     note: str = ""
@@ -120,11 +133,13 @@ def clean_doi(doi: str) -> str:
     return doi.rstrip(".,;)].").lower()
 
 
-def normalize_doi_for_dup(doi: str) -> str:
+def normalize_doi_for_dup(doi: str, keep_trailing_slash: bool = False) -> str:
     """Strict DOI normalization for duplicate detection.
 
     Beyond clean_doi(): strips common URL prefixes and trailing slashes so that
     `https://doi.org/10.1234/abc/` and `10.1234/abc` collapse to the same key.
+    A trailing slash is legal in a DOI, so a registry lookup also needs the form
+    that keeps it (`keep_trailing_slash=True`).
     """
     if not doi:
         return ""
@@ -134,7 +149,9 @@ def normalize_doi_for_dup(doi: str) -> str:
         if s.startswith(prefix):
             s = s[len(prefix):]
             break
-    s = s.strip().rstrip("/")
+    s = s.strip()
+    if not keep_trailing_slash:
+        s = s.rstrip("/")
     return clean_doi(s)
 
 
@@ -166,7 +183,7 @@ def brace_field(entry: str, name: str) -> str:
     comma optional. Counting depth is correct in both cases. Returns "" when the field is absent or
     is not brace-delimited.
     """
-    m = re.search(rf"{name}\s*=\s*\{{", entry, re.I)
+    m = re.search(rf"(?<![\w-]){name}\s*=\s*\{{", entry, re.I)
     if not m:
         return ""
     start = m.end()
@@ -180,15 +197,87 @@ def brace_field(entry: str, name: str) -> str:
     return entry[start : j - 1]
 
 
+# An entry opens with `@type{` or `@type(`. BibTeX allows whitespace before the `@`, between the
+# type and the delimiter, and the parenthesised form; splitting only at a column-0 `@type{` merged
+# every such entry into the one before it, so only the first was ever looked up while the audit
+# still reported submission_safe.
+BIB_ENTRY_HEAD_RE = re.compile(r"@[ \t]*(\w+)\s*([{(])")
+# Not references: string macros, preamble, and comments. They are skipped, not audited.
+BIB_NON_ENTRY_TYPES = ("comment", "string", "preamble")
+
+
+def _bib_entry_end(text: str, i: int, opener: str) -> int:
+    """Index just past the delimiter that closes the entry body starting at text[i].
+
+    `@` inside a field value is text to BibTeX ("{Hospital} @ Home ({HaH})", an e-mail address),
+    so the body is walked by brace depth and only its own closing delimiter ends the entry.
+    Returns -1 when the body never closes.
+    """
+    depth, quoted, n = 0, False, len(text)
+    while i < n:
+        c = text[i]
+        if c == "{":
+            depth += 1
+        elif c == "}":
+            if depth == 0:
+                return i + 1 if opener == "{" else -1
+            depth -= 1
+        elif opener == "(" and depth == 0:
+            if c == '"':
+                quoted = not quoted
+            elif c == ")" and not quoted:
+                return i + 1
+        i += 1
+    return -1
+
+
+def _bib_entry_starts(text: str) -> list[int]:
+    """Offsets of the entry headers in `text`, in order.
+
+    Between entries a header counts when only whitespace precedes it on its line, or only
+    whitespace separates it from the previous entry's closing delimiter (`} @article{b,`).
+    Inside an entry's body an `@` is field text, never a header. One exception keeps what the
+    old column-0 split always did: a `@type{` at column 0 starts an entry even inside a body
+    that has not closed yet, so one unbalanced brace cannot swallow the rest of the file.
+    """
+    col0 = [m.start() for m in re.finditer(r"^@\w+\{", text, re.M)]
+    starts: list[int] = []
+    pos, prev_end = 0, -1
+    while True:
+        m = BIB_ENTRY_HEAD_RE.search(text, pos)
+        if not m:
+            return starts
+        line_start = text.rfind("\n", 0, m.start()) + 1
+        after_prev = prev_end >= 0 and not text[prev_end:m.start()].strip()
+        if text[line_start:m.start()].strip() and not after_prev:
+            pos = m.start() + 1
+            continue
+        starts.append(m.start())
+        end = _bib_entry_end(text, m.end(), m.group(2))
+        nxt = next((c for c in col0 if c > m.start()), -1)
+        if end < 0 or 0 <= nxt < end:
+            # The body has not closed before the next column-0 header: resume there.
+            if nxt < 0:
+                return starts
+            pos, prev_end = nxt, -1
+            continue
+        pos, prev_end = end, end
+
+
 def parse_bib(text: str) -> list[RefRecord]:
     records: list[RefRecord] = []
-    entries = re.split(r"\n(?=@\w+\{)", "\n" + text)
+    starts = _bib_entry_starts(text)
+    entries = [text[a:b] for a, b in zip(starts, starts[1:] + [len(text)])]
     for entry in entries:
         entry = entry.strip()
-        if not entry.startswith("@"):
+        kind = re.match(r"@[ \t]*(\w+)", entry)
+        if not kind or kind.group(1).lower() in BIB_NON_ENTRY_TYPES:
             continue
-        key_match = re.match(r"@\w+\{([^,]+),", entry)
-        title_match = re.search(r"title\s*=\s*[\{\"](.+?)[\}\"]\s*,", entry, re.I | re.S)
+        key_match = re.match(r"@[ \t]*\w+\s*[{(]\s*([^,]+?)\s*,", entry)
+        # Field names are matched whole (`(?<![\w-])`): `title` also matched inside `booktitle`,
+        # so a proceedings paper whose booktitle came first was read with the proceedings name.
+        title_match = (re.search(r"(?<![\w-])title\s*=\s*[\{\"](.+?)[\}\"]\s*,", entry, re.I | re.S)
+                       or re.search(r'(?<![\w-])title\s*=\s*"([^"]+)"', entry, re.I))
         # The trailing comma is OPTIONAL: BibTeX does not require one after an entry's LAST field,
         # and `doi` is very often that last field. Requiring it left `record.doi` empty for those
         # entries, which skips the CrossRef check outright and drops the record onto the soft-flagged
@@ -196,9 +285,9 @@ def parse_bib(text: str) -> list[RefRecord]:
         # check this skill exists for was silently off for exactly those references. Unlike `title`
         # on the line above, a DOI never carries brace-protected inner groups (`{Delphi}`), so
         # stopping at the first `}` is correct here and would truncate there.
-        doi_match = re.search(r"doi\s*=\s*[\{\"](.+?)[\}\"]\s*,?", entry, re.I | re.S)
-        pmid_match = re.search(r"pmid\s*=\s*[\{\"]?(\d{5,9})", entry, re.I)
-        year_match = re.search(r"year\s*=\s*[\{\"]?((?:19|20)\d{2})", entry, re.I)
+        doi_match = re.search(r"(?<![\w-])doi\s*=\s*[\{\"](.+?)[\}\"]\s*,?", entry, re.I | re.S)
+        pmid_match = re.search(r"(?<![\w-])pmid\s*=\s*[\{\"]?(\d{5,9})", entry, re.I)
+        year_match = re.search(r"(?<![\w-])year\s*=\s*[\{\"]?((?:19|20)\d{2})", entry, re.I)
         raw = normalize_space(entry)
         author_field = brace_field(entry, "author")
         # `title` needs the same balanced-brace read, and for the same reason `doi` needed an
@@ -221,6 +310,7 @@ def parse_bib(text: str) -> list[RefRecord]:
                 ref_id=key_match.group(1) if key_match else f"ref_{len(records)+1}",
                 raw=raw,
                 title_guess=normalize_space(title_text),
+                title_from_field=bool(title_text.strip()),
                 doi=clean_doi(doi_match.group(1)) if doi_match else "",
                 pmid=pmid_match.group(1) if pmid_match else "",
                 year_guess=year_match.group(1) if year_match else "",
@@ -257,6 +347,7 @@ def parse_tsv(text: str) -> list[RefRecord]:
                 ref_id=f"ref_{i}",
                 raw=normalize_space(joined),
                 title_guess=title,
+                title_from_field=bool(title.strip()),
                 doi=doi,
                 pmid=pmid,
                 first_author_guess=parse_first_author(author_field) if author_field else "",
@@ -266,11 +357,25 @@ def parse_tsv(text: str) -> list[RefRecord]:
     return records
 
 
+# A bare "References" line, or a Markdown heading ("## References", "**References**",
+# Quarto's "# References {.unnumbered}"). Missing the heading form parsed the whole .md/.qmd,
+# so body paragraphs and bullets became references (all UNVERIFIED; --strict never passed).
+REFERENCE_HEADING_RE = re.compile(
+    r"(?im)^[ \t]*(#{1,6})?[ \t]*\**[ \t]*(?:references|bibliography|reference list)"
+    r"[ \t]*\**[ \t]*:?[ \t]*(?:\{[^}\n]*\})?[ \t]*$"
+)
+
+
 def reference_section(text: str) -> str:
-    match = re.search(r"(?im)^\s*(references|bibliography|reference list)\s*$", text)
-    if match:
-        return text[match.end() :]
-    return text
+    match = REFERENCE_HEADING_RE.search(text)
+    if not match:
+        return text
+    section = text[match.end() :]
+    # The list ends at the next heading of the same or a higher level (Tables, Figure
+    # Legends); after a bare "References" line, at any Markdown heading.
+    level = len(match.group(1) or "") or 6
+    end = re.search(rf"(?m)^[ \t]*#{{1,{level}}}[ \t]", section)
+    return section[: end.start()] if end else section
 
 
 def parse_reference_lines(text: str) -> list[RefRecord]:
@@ -441,10 +546,18 @@ def author_surnames_match(cited: str, actual: str) -> bool:
     # Particle-stripped variants ("von elm" vs "elm")
     a_core = re.sub(r"^(?:" + "|".join(_NAME_PARTICLES) + r")\s+", "", a)
     b_core = re.sub(r"^(?:" + "|".join(_NAME_PARTICLES) + r")\s+", "", b)
-    if a_core and b_core and (a_core == b_core or a_core in b_core or b_core in a_core):
+    if a_core and b_core and a_core == b_core:
         return True
-    # Hyphen vs space ("Abd-alrazaq" vs "abd alrazaq")
-    if a.replace("-", " ") == b.replace("-", " "):
+    # One name is a whole-word part of the other ("Garcia" vs "Garcia-Lopez", "Berg" vs
+    # "van der Berg"). Containment is accepted only at a space or hyphen boundary: raw substring
+    # containment let any short surname match any longer one that spells it ("Li" vs
+    # "Williams", "Kim" vs "Kimura"), so a fabricated co-author passed the positional check.
+    a_words = [w for w in re.split(r"[\s-]+", a_core) if w]
+    b_words = [w for w in re.split(r"[\s-]+", b_core) if w]
+    if a_words and b_words and (set(a_words) <= set(b_words) or set(b_words) <= set(a_words)):
+        return True
+    # Hyphen vs space vs run-together ("Abd-alrazaq" vs "abd alrazaq", "Dela Cruz" vs "De la Cruz")
+    if re.sub(r"[\s-]", "", a) == re.sub(r"[\s-]", "", b):
         return True
     return False
 
@@ -490,8 +603,59 @@ def http_json(url: str, timeout: int) -> dict | None:
         return None
 
 
-def verify_crossref(doi: str, timeout: int) -> tuple[str, str, list]:
-    """Returns (status, evidence, family_names).
+def http_fetch(url: str, timeout: int) -> tuple[int | None, dict | None]:
+    """(HTTP status, parsed JSON body) — unlike http_json, an error status is returned.
+
+    A registry's 404 is an answer ("no such DOI"), not a failed lookup, so the DOI path
+    needs to tell it apart from a timeout. Status is None when no HTTP response arrived;
+    the body is None when it is not JSON.
+    """
+    req = urllib.request.Request(url, headers={"User-Agent": _user_agent()})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            status, body = resp.status, resp.read()
+    except urllib.error.HTTPError as err:
+        status = err.code
+        try:
+            body = err.read()
+        except Exception:
+            body = b""
+    except Exception:
+        return None, None
+    try:
+        return status, json.loads(body.decode("utf-8", "replace"))
+    except ValueError:
+        return status, None
+
+
+def crossref_year(msg: dict) -> str:
+    """The year to show for a CrossRef record: print, then online, then issued.
+
+    `issued` is the EARLIEST publication date, so an article published online in December
+    and in a print issue the next January reports the online year there, while journals
+    cite the issue year. Showing `issued` alone invites "correcting" a bib year that was
+    right. When the candidates disagree, both are shown, e.g. "2023 (print; online 2022)".
+    """
+    years: list[tuple[str, str]] = []
+    for field_name, label in (("published-print", "print"), ("published-online", "online"),
+                              ("issued", "issued")):
+        parts = ((msg.get(field_name) or {}).get("date-parts") or [[None]])[0]
+        if parts and parts[0]:
+            years.append((label, str(parts[0])))
+    if not years:
+        return ""
+    primary_label, primary = years[0]
+    others: list[tuple[str, str]] = []
+    for label, value in years[1:]:
+        if value != primary and all(value != seen for _, seen in others):
+            others.append((label, value))
+    if not others:
+        return primary
+    return f"{primary} ({primary_label}; " + "; ".join(f"{l} {v}" for l, v in others) + ")"
+
+
+def verify_crossref(doi: str, timeout: int, titles: list | None = None) -> tuple[str, str, list]:
+    """Returns (status, evidence, family_names); on OK, the record's titles go into `titles`.
 
     v1.3.0: returns full author family list instead of first-author only.
     CrossRef API is not authoritative for given names (documented case: CrossRef
@@ -499,13 +663,14 @@ def verify_crossref(doi: str, timeout: int) -> tuple[str, str, list]:
     Use verify_pubmed_efetch as the truth source when PMID is available.
     """
     url = "https://api.crossref.org/works/" + urllib.parse.quote(doi)
-    data = http_json(url, timeout)
-    if not data or data.get("status") != "ok":
+    status, data = http_fetch(url, timeout)
+    if status == 404:
+        return verify_doi_handle(doi, timeout)
+    if not isinstance(data, dict) or data.get("status") != "ok":
         return "UNVERIFIED", "CrossRef DOI lookup failed", []
     msg = data.get("message", {})
     title = " ".join(msg.get("title") or [])
-    year_parts = (((msg.get("issued") or {}).get("date-parts") or [[None]])[0])
-    year = str(year_parts[0]) if year_parts and year_parts[0] else ""
+    year = crossref_year(msg)
     authors_raw = msg.get("author") or []
     families: list[str] = []
     for a in authors_raw:
@@ -519,11 +684,78 @@ def verify_crossref(doi: str, timeout: int) -> tuple[str, str, list]:
         evidence += f"; year={year}"
     if families:
         evidence += f"; authors={len(families)} (first={families[0]})"
+    if titles is not None:
+        titles.extend(crossref_titles(msg))
     return "OK", evidence, families
 
 
-def verify_pubmed_pmid(pmid: str, timeout: int) -> tuple[str, str, list]:
-    """Returns (status, evidence, family_names).
+def crossref_titles(msg: dict) -> list:
+    """Every title a CrossRef record answers to.
+
+    CrossRef keeps a subtitle in its own field, so the cited "Main: Sub" is matched against
+    the joined form as well as the bare title; a translated work carries `original-title`; and
+    a chapter DOI cited by its book's title is not a different work.
+    """
+    main = [t for t in (msg.get("title") or []) if t]
+    out = list(main)
+    out += [f"{m}: {sub}" for m in main for sub in (msg.get("subtitle") or []) if sub]
+    out += [t for t in (msg.get("original-title") or []) + (msg.get("short-title") or []) if t]
+    if msg.get("type") in ("book-chapter", "book-section", "book-part", "reference-entry"):
+        out += [t for t in (msg.get("container-title") or []) if t]
+    return out
+
+
+def verify_doi_handle(doi: str, timeout: int) -> tuple[str, str, list]:
+    """A DOI CrossRef answered 404 for: ask the DOI handle registry whether it exists at all.
+
+    CrossRef is one of several registration agencies (DataCite, mEDRA, JaLC, ...), so its 404
+    alone proves nothing. doi.org's handle API resolves across all of them: HTTP 404 with
+    responseCode 100 means the DOI is registered nowhere, i.e. it does not exist -> FABRICATED,
+    the same meaning as a PMID PubMed has no record of (verify_record turns it into MISMATCH
+    when a title search then finds the work: a real paper cited with a wrong DOI). A registered
+    DOI (a DataCite one, say) stays UNVERIFIED for the later indexes to confirm; any other
+    answer (5xx, unexpected JSON), a network error, or a string that is not a well-formed DOI
+    (a placeholder such as "n/a") is UNVERIFIED as before. A DOI may legally end in "/", which
+    normalization strips, so the cited form is looked up too: FABRICATED only when every form is
+    registered nowhere. A legacy SICI DOI that is not found stays UNVERIFIED: its punctuation is
+    easily cut in extraction. Returns (status, evidence, family_names).
+    """
+    handle = normalize_doi_for_dup(doi)
+    if not WELL_FORMED_DOI_RE.match(handle):
+        return "UNVERIFIED", "CrossRef 404; not a well-formed DOI, doi.org not consulted", []
+    answers = []
+    for form in dict.fromkeys([handle, normalize_doi_for_dup(doi, keep_trailing_slash=True)]):
+        status, data = http_fetch("https://doi.org/api/handles/" + urllib.parse.quote(form), timeout)
+        code = data.get("responseCode") if isinstance(data, dict) else None
+        answers.append("found" if (status, code) == (200, 1)
+                       else "not_found" if (status, code) == (404, 100) else "failed")
+    if "found" in answers:
+        return "UNVERIFIED", "CrossRef 404; DOI registered with another agency (doi.org handle found)", []
+    if "failed" in answers:
+        return "UNVERIFIED", "CrossRef 404; doi.org handle lookup failed", []
+    if "(sici)" in handle:
+        # A SICI DOI's punctuation (<>, #, ;) is easily cut in extraction; not-found is not proof.
+        return "UNVERIFIED", "CrossRef 404; doi.org handle not found, but a legacy SICI DOI; extraction may be incomplete", []
+    return "FABRICATED", "DOI does not exist in any registry (CrossRef 404; doi.org handle not found)", []
+
+
+def _esummary_families(item: dict) -> list[str]:
+    """Family names from one esummary record ("Surname Initials" -> "Surname"), personal authors only."""
+    families: list[str] = []
+    for a in item.get("authors") or []:
+        if a.get("authtype") not in (None, "Author"):
+            continue
+        full = (a.get("name") or "").strip()
+        # esummary "name" is "Surname Initials" e.g. "Reichheld FF"
+        m = re.match(r"^(.+?)\s+[A-Z]{1,4}$", full)
+        fam = m.group(1).strip() if m else full
+        if fam:
+            families.append(fam)
+    return families
+
+
+def verify_pubmed_pmid(pmid: str, timeout: int, titles: list | None = None) -> tuple[str, str, list]:
+    """Returns (status, evidence, family_names); on OK, the record's titles go into `titles`.
 
     Uses esummary (fast). Returns family-name approximation by stripping trailing
     initial block from "Surname Initials" form. Authoritative names → call
@@ -542,25 +774,22 @@ def verify_pubmed_pmid(pmid: str, timeout: int) -> tuple[str, str, list]:
     if item.get("error"):
         return "FABRICATED", f"PubMed PMID error: {item['error']}", []
     title = html.unescape(item.get("title", ""))
-    authors_raw = item.get("authors") or []
-    families: list[str] = []
-    for a in authors_raw:
-        if a.get("authtype") not in (None, "Author"):
-            continue
-        full = (a.get("name") or "").strip()
-        # esummary "name" is "Surname Initials" e.g. "Reichheld FF"
-        m = re.match(r"^(.+?)\s+[A-Z]{1,4}$", full)
-        fam = m.group(1).strip() if m else full
-        if fam:
-            families.append(fam)
+    families = _esummary_families(item)
     evidence = f"PubMed PMID OK; title={title[:120]}; authors={len(families)}"
     if families:
         evidence += f" (first={families[0]})"
+    if titles is not None:
+        titles.extend(t for t in (title, html.unescape(item.get("vernaculartitle") or ""),
+                                  html.unescape(item.get("booktitle") or "")) if t)
     return "OK", evidence, families
 
 
-def verify_pubmed_efetch(pmid: str, timeout: int) -> tuple[str, str, list, list]:
+def verify_pubmed_efetch(pmid: str, timeout: int,
+                         titles: list | None = None) -> tuple[str, str, list, list]:
     """Authoritative PubMed full author record via efetch.fcgi (XML).
+
+    On OK, the article's titles (a translated ArticleTitle and its VernacularTitle, or a
+    BookTitle) go into `titles`.
 
     Returns (status, evidence, family_names, given_names). Use given_names for
     given-name cross-check (CrossRef-vs-PubMed disagreement, e.g. a documented
@@ -590,6 +819,12 @@ def verify_pubmed_efetch(pmid: str, timeout: int) -> tuple[str, str, list, list]
         if lm:
             families.append(html.unescape(lm.group(1)).strip())
             givens.append(html.unescape(fm.group(1)).strip() if fm else "")
+    # Titles are kept even when there are no personal authors: a collective-author record
+    # (a guideline group) has none, and its VernacularTitle is only here, not in esummary.
+    if titles is not None:
+        for tag in ("ArticleTitle", "VernacularTitle", "BookTitle"):
+            for tm in re.finditer(rf"<{tag}\b[^>]*>(.*?)</{tag}>", xml_text, re.S):
+                titles.append(html.unescape(tm.group(1)))
     if not families:
         return "UNVERIFIED", "PubMed efetch returned no author elements", [], []
     return (
@@ -601,7 +836,14 @@ def verify_pubmed_efetch(pmid: str, timeout: int) -> tuple[str, str, list, list]
 
 
 def verify_pubmed_title(title: str, timeout: int) -> tuple[str, str, list]:
-    """Title-only search returns no confident author list."""
+    """Title-only search; on a match, returns the matched record's esummary family names.
+
+    esearch matches the words of a title, not the title, so a made-up title still returns
+    PMIDs and a hit proves nothing on its own. The candidates' titles are fetched and the best
+    one must pass the same similarity guard as the OpenAlex title search; otherwise the row
+    stays UNVERIFIED. Returning OK on the bare hit let a reference with a fabricated DOI and a
+    fabricated title end OK and fully verified.
+    """
     if not title:
         return "UNVERIFIED", "No DOI, PMID, or usable title", []
     url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?" + urllib.parse.urlencode(
@@ -613,23 +855,176 @@ def verify_pubmed_title(title: str, timeout: int) -> tuple[str, str, list]:
     ids = data.get("esearchresult", {}).get("idlist", [])
     if not ids:
         return "UNVERIFIED", "No PubMed title match", []
-    return "OK", f"PubMed title match; PMID candidates={','.join(ids)}", []
+    time.sleep(0.2)
+    url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?" + urllib.parse.urlencode(
+        {"db": "pubmed", "id": ",".join(ids), "retmode": "json", **_ncbi_extras()}
+    )
+    summary = http_json(url, timeout)
+    if not summary:
+        return "UNVERIFIED", f"PubMed title candidates could not be fetched; PMID candidates={','.join(ids)}", []
+    result = summary.get("result", {})
+    best_id, best_sim = "", 0.0
+    for pmid in ids:
+        sim = _title_similarity(title, html.unescape((result.get(pmid) or {}).get("title", "")))
+        if sim > best_sim:
+            best_id, best_sim = pmid, sim
+    if best_sim >= TITLE_MATCH_MIN:
+        # The matched record's authors go back to the caller: a title match says a work with a
+        # similar title exists, not that the cited authors wrote it, so verify_record must still
+        # cross-check them before the row can be OK.
+        return ("OK", f"PubMed title match; PMID={best_id} (sim={best_sim:.2f})",
+                _esummary_families(result.get(best_id) or {}))
+    return (
+        "UNVERIFIED",
+        f"No confident PubMed title match (best sim={best_sim:.2f}); PMID candidates={','.join(ids)}",
+        [],
+    )
+
+
+# Minimum _title_similarity for a title-search hit to count as the cited work (OpenAlex and
+# the PubMed title fallback share it).
+TITLE_MATCH_MIN = 0.8
+
+
+# Connective words ignored by _title_similarity. Other short tokens stay: CT, MR, US, AI, HR
+# and single digits are what tells two otherwise identical titles apart.
+_TITLE_STOPWORDS = frozenset(
+    "a an the of in on to for and or by with at as is vs from".split())
 
 
 def _title_similarity(a: str, b: str) -> float:
     """Token Jaccard on normalized titles (stdlib-only).
 
-    Guards OpenAlex title matches: a fabricated title must not earn a spurious OK
-    just because a full-text search returned some unrelated work. Stop-short tokens
-    (<=2 chars) are dropped so connective words do not inflate similarity.
+    Guards title-search matches (OpenAlex, PubMed fallback): a fabricated title must not
+    earn a spurious OK just because a search returned some unrelated work. Connective
+    stopwords are dropped so they do not inflate similarity, and a possessive "'s" is
+    removed first so "Alzheimer's" and "Alzheimer" agree. Every other token counts, however
+    short: dropping tokens of <=2 characters made "... in CT" match "... in MR", and dropping
+    single letters made "hepatitis B" match "hepatitis C".
     """
     def toks(s: str) -> set:
-        s = re.sub(r"[^a-z0-9 ]", " ", s.lower())
-        return {w for w in s.split() if len(w) > 2}
+        s = re.sub(r"['\u2019]s\b", "", s.lower())
+        s = re.sub(r"[^a-z0-9 ]", " ", s)
+        return {w for w in s.split() if w not in _TITLE_STOPWORDS}
     ta, tb = toks(a), toks(b)
     if not ta or not tb:
         return 0.0
     return len(ta & tb) / len(ta | tb)
+
+
+# A DOI or PMID that resolves verifies the work it resolves to, not the title cited with it. The
+# cited title is compared with every title the record answers to: fewer than half of the cited
+# title's words found in any of them is a different work. Measuring the cited side tolerates a
+# cited title that leaves out the record's subtitle, without letting a short title of a related
+# paper match a longer cited one because most of its few words are in it.
+IDENTIFIER_TITLE_MIN = 0.5
+
+
+def _us_spelling(w: str) -> str:
+    """Fold British spellings onto American ones, so that a title differing only in spelling
+    (paediatric/pediatric, tumour/tumor, randomised/randomized, centre/center) is not counted
+    as a different title."""
+    if len(w) > 4 and w.endswith("our"):
+        w = w[:-3] + "or"
+    if len(w) >= 5:  # an acronym (MAE, OE) is not a spelling
+        w = w.replace("ae", "e").replace("oe", "e")
+    w = re.sub(r"(?<=[a-z]{3})is(e|ed|ing|ation)$", r"iz\1", w)
+    w = re.sub(r"(?<=[a-z]{2})yse$", "yze", w)
+    w = re.sub(r"(?<=[a-z]{3}[aeiou])ll(ed|ing|er)$", r"l\1", w)  # modelled, labelling
+    w = re.sub(r"(?<=[a-z]{2})(t|b)red$", r"\1ered", w)  # centred -> centered
+    return re.sub(r"(?<=[a-z]{2})(t|b)re$", r"\1er", w)  # centre, metre, theatre, fibre
+
+
+def _title_words(s: str) -> set | None:
+    """Content words of a title, or None when it is not readable as Latin script.
+
+    The tokenizer folds to ASCII, so a title mostly in another script (Chinese, Korean,
+    Cyrillic) would shrink to its few Latin acronyms and be compared on those alone.
+    """
+    s = html.unescape(s or "")
+    s = re.sub(r"<[^>]+>", " ", s)          # publisher markup: <i>, <sub>, MathML
+    s = re.sub(r"\\[a-zA-Z]+", " ", s)      # LaTeX commands in a BibTeX title
+    letters = sum(ch.isalpha() for ch in s)
+    s = re.sub(r"['\u2019]s\b", "", s.lower())
+    s = unicodedata.normalize("NFKD", s).encode("ascii", "ignore").decode("ascii")
+    if not letters or sum(ch.isalpha() for ch in s) < letters / 2:
+        return None
+    s = re.sub(r"[^a-z0-9 ]", " ", s)
+    words = set()
+    for w in s.split():
+        if w in _TITLE_STOPWORDS:
+            continue
+        if len(w) > 3 and w.endswith("s") and not w.endswith(("ss", "is", "us")):
+            w = w[:-1]
+        words.add(_us_spelling(w))
+    return words or None
+
+
+def _same_title(a: str, b: str) -> bool:
+    """Near-identical titles (Jaccard >= TITLE_MATCH_MIN): the same title in two records."""
+    wa, wb = _title_words(a), _title_words(b)
+    return bool(wa and wb) and len(wa & wb) / len(wa | wb) >= TITLE_MATCH_MIN
+
+
+def cited_title_agrees(cited: str, resolved: list) -> bool | None:
+    """Does the cited title name the record its DOI/PMID resolved to?
+
+    True when some resolved title contains at least IDENTIFIER_TITLE_MIN of the cited title's
+    words, False when none does, None when there is nothing to compare: no cited title, or no
+    title on either side readable as Latin script.
+    """
+    cited_words = _title_words(cited)
+    if not cited_words:
+        return None
+    verdict = None
+    for title in resolved:
+        words = _title_words(title)
+        if not words:
+            continue
+        if len(cited_words & words) / len(cited_words) >= IDENTIFIER_TITLE_MIN:
+            return True
+        verdict = False
+    return verdict
+
+
+# A reference line also carries author and journal words, which can supply half of a short
+# title by chance ("Cancer research priorities" in a line citing the journal Cancer Research),
+# so a line must contain most of the resolved title, or of its part before a colon.
+LINE_TITLE_MIN = 0.8
+
+
+def _non_latin_letters(s: str) -> int:
+    """Letters outside the Latin and Greek scripts (CJK, Hangul, Cyrillic, ...). Greek is common
+    in scientific titles (beta-amyloid), and accented Latin letters (o-slash, sharp s) are Latin."""
+    return sum(1 for ch in s if ch.isalpha()
+               and not unicodedata.name(ch, "").startswith(("LATIN", "GREEK")))
+
+
+def resolved_title_in_text(text: str, resolved: list) -> bool | None:
+    """Is the resolved title written in a plain-text reference line?
+
+    A line's guessed title is often its author list, so the line itself is searched: True when
+    at least LINE_TITLE_MIN of the words of some resolved title (or of its main title before a
+    colon) occur in it, False when none does, None when there is nothing to compare: a line
+    holding a letter of another script (its title may be written in it), or no resolved title
+    readable as Latin script. A record title of two or three words that happen to stand in the
+    line's journal name or author list still matches; the check cannot tell them apart.
+    """
+    if _non_latin_letters(text):
+        return None
+    text_words = _title_words(text)
+    if not text_words:
+        return None
+    verdict = None
+    for title in resolved:
+        for candidate in dict.fromkeys([title, title.split(":")[0]]):
+            words = _title_words(candidate)
+            if not words or (candidate != title and len(words) < 3):
+                continue
+            if len(words & text_words) / len(words) >= LINE_TITLE_MIN:
+                return True
+            verdict = False
+    return verdict
 
 
 def _openalex_families(work: dict) -> list:
@@ -661,7 +1056,8 @@ def _openalex_families(work: dict) -> list:
     return families
 
 
-def verify_openalex(doi: str, title: str, timeout: int) -> tuple[str, str, list]:
+def verify_openalex(doi: str, title: str, timeout: int,
+                    titles: list | None = None) -> tuple[str, str, list]:
     """Tertiary index for conference proceedings / non-DOI / non-biomedical works.
 
     PubMed covers only biomedical literature and CrossRef's proceedings coverage is
@@ -696,7 +1092,7 @@ def verify_openalex(doi: str, title: str, timeout: int) -> tuple[str, str, list]
             sim = _title_similarity(title, w.get("title") or w.get("display_name") or "")
             if sim > best_sim:
                 best, best_sim = w, sim
-        if best is not None and best_sim >= 0.8:
+        if best is not None and best_sim >= TITLE_MATCH_MIN:
             work = best
             via = f"title(sim={best_sim:.2f})"
     if work is None:
@@ -709,6 +1105,8 @@ def verify_openalex(doi: str, title: str, timeout: int) -> tuple[str, str, list]
         ev += f"; year={year}"
     if families:
         ev += f"; authors={len(families)} (first={families[0]})"
+    if titles is not None and via == "doi":
+        titles.extend(t for t in (work.get("title"), work.get("display_name")) if t)
     return "OK", ev, families
 
 
@@ -811,27 +1209,28 @@ def verify_record(record: RefRecord, offline: bool, timeout: int,
     statuses: list[str] = []
     evidence_parts: list[str] = []
     actual_authors: list[str] = []
-    actual_givens: list[str] = []
     sources_consulted: list[str] = []
     # True when the actual_authors list came from OpenAlex, whose display names carry
     # no structured family field and mix "First Last" / "Last, First" forms. Such a
     # list can support a tolerant first-author membership check but NOT the strict
     # positional + author-count cross-check (which would mis-fire on the format noise).
     actual_authors_soft = False
+    # The titles each identifier resolved to; the reference must carry a title of each one, so a
+    # wrong DOI is caught even when the PMID beside it is right.
+    resolved_titles: dict[str, list[str]] = {"PMID": [], "DOI": []}
 
     # Step 1 — PubMed efetch (authoritative) when PMID present.
     if record.pmid:
-        st, ev, fams, givens = verify_pubmed_efetch(record.pmid, timeout)
+        st, ev, fams, _givens = verify_pubmed_efetch(record.pmid, timeout, titles=resolved_titles["PMID"])
         time.sleep(0.2)
         statuses.append(st)
         evidence_parts.append(ev)
         if st == "OK" and fams:
             actual_authors = fams
-            actual_givens = givens
             sources_consulted.append("pubmed_efetch")
         # also run esummary for FABRICATED detection (efetch returns valid XML even for
         # unknown PMIDs in some edge cases; esummary's "error" field is decisive).
-        st_es, ev_es, fams_es = verify_pubmed_pmid(record.pmid, timeout)
+        st_es, ev_es, fams_es = verify_pubmed_pmid(record.pmid, timeout, titles=resolved_titles["PMID"])
         time.sleep(0.2)
         statuses.append(st_es)
         evidence_parts.append(ev_es)
@@ -841,7 +1240,7 @@ def verify_record(record: RefRecord, offline: bool, timeout: int,
 
     # Step 2 — CrossRef DOI (used only when efetch did not provide a list).
     if record.doi:
-        st_cr, ev_cr, fams_cr = verify_crossref(record.doi, timeout)
+        st_cr, ev_cr, fams_cr = verify_crossref(record.doi, timeout, titles=resolved_titles["DOI"])
         time.sleep(0.2)
         statuses.append(st_cr)
         evidence_parts.append(ev_cr)
@@ -855,7 +1254,8 @@ def verify_record(record: RefRecord, offline: bool, timeout: int,
     # Recovers conference proceedings and non-biomedical works (NeurIPS/ICLR/ACL) and
     # retries DOIs that CrossRef missed.
     if use_openalex and not actual_authors:
-        st_oa, ev_oa, fams_oa = verify_openalex(record.doi, record.title_guess, timeout)
+        st_oa, ev_oa, fams_oa = verify_openalex(record.doi, record.title_guess, timeout,
+                                                titles=resolved_titles["DOI"])
         time.sleep(0.2)
         statuses.append(st_oa)
         evidence_parts.append(ev_oa)
@@ -866,11 +1266,18 @@ def verify_record(record: RefRecord, offline: bool, timeout: int,
                 actual_authors_soft = True
 
     # Step 4 — PubMed title-only final fallback when nothing confident resolved.
+    title_only = False
     if "OK" not in statuses and not actual_authors:
-        st_t, ev_t, _ = verify_pubmed_title(record.title_guess, timeout)
+        st_t, ev_t, fams_t = verify_pubmed_title(record.title_guess, timeout)
         time.sleep(0.2)
         statuses.append(st_t)
         evidence_parts.append(ev_t)
+        # A cited DOI/PMID that does not exist already makes a found work MISMATCH ("wrong
+        # identifier"); that verdict does not rest on the authors, so it is left as it was.
+        if st_t == "OK" and "FABRICATED" not in statuses:
+            title_only = True
+            sources_consulted.append("pubmed_title")
+            actual_authors = fams_t
 
     # Full-author cross-check
     record.actual_authors = actual_authors
@@ -905,15 +1312,54 @@ def verify_record(record: RefRecord, offline: bool, timeout: int,
     if author_mismatch:
         evidence_parts.append("AUTHOR MISMATCH | " + " | ".join(mismatches))
 
+    # A resolving identifier with agreeing authors used to be OK whatever title was cited with
+    # it. A title read from a title field is compared as a title; a plain-text reference line
+    # (Markdown, DOCX, text) is searched for the resolved title instead, because the title
+    # guessed from such a line is often its author list (see RefRecord.title_from_field).
+    wrong_ids = []
+    if "OK" in statuses:
+        verdicts = {
+            ident: (cited_title_agrees(record.title_guess, titles) if record.title_from_field
+                    else resolved_title_in_text(record.raw, titles))
+            for ident, titles in resolved_titles.items() if titles
+        }
+        for ident, agrees in verdicts.items():
+            other = "DOI" if ident == "PMID" else "PMID"
+            # A CrossRef record may hold only the original-language title of a paper PubMed lists
+            # in English: when this identifier's title matches the other identifier's record
+            # (whose titles include PubMed's VernacularTitle), both name the same work.
+            same_work = verdicts.get(other) is True and any(
+                _same_title(a, b) for a in resolved_titles[ident] for b in resolved_titles[other])
+            if agrees is False and not same_work:
+                wrong_ids.append(ident)
+    title_mismatch = bool(wrong_ids)
+    if title_mismatch:
+        evidence_parts.append(f"TITLE MISMATCH | the {'/'.join(wrong_ids)} resolves to a work whose "
+                              "title shares under half its words with the cited reference")
+
     # Status precedence
     if "OK" in statuses and "FABRICATED" in statuses:
         record.status = "MISMATCH"
     elif "OK" in statuses:
-        record.status = "MISMATCH" if author_mismatch else "OK"
+        record.status = "MISMATCH" if (author_mismatch or title_mismatch) else "OK"
     elif "FABRICATED" in statuses:
         record.status = "FABRICATED"
     else:
         record.status = "UNVERIFIED"
+
+    # A title-only match identifies a work only through its title, so it is OK only when the
+    # cited authors were compared with that record's authors and agree. With no author list on
+    # either side, or with authors that disagree (the matched record may be a different work with
+    # a similar title, e.g. "hepatitis B" vs "hepatitis C"), the reference stays UNVERIFIED.
+    if title_only and record.status in ("OK", "MISMATCH") \
+            and not (record.corporate_author or source_corporate):
+        compared = bool(actual_authors) and bool(record.cited_authors or record.first_author_guess)
+        if author_mismatch or not compared:
+            record.status = "UNVERIFIED"
+            record.note = ("title_only: PubMed title match whose authors differ from the cited ones"
+                           if author_mismatch else
+                           "title_only: PubMed title match; authors could not be compared")
+            author_mismatch = False
 
     # Note classification (most informative wins)
     if author_mismatch and not record.note:
@@ -928,6 +1374,11 @@ def verify_record(record: RefRecord, offline: bool, timeout: int,
             record.note = "first-author hallucination suspected (DOI/PMID correct, family differs)"
         else:
             record.note = "non-first-author hallucination or count mismatch (DOI/PMID correct)"
+    if title_mismatch and not record.note:
+        record.note = (f"title mismatch: the {'/'.join(wrong_ids)} resolves to a work with a "
+                       "different title")
+    if "OK" in statuses and "FABRICATED" in statuses and not record.note:
+        record.note = "wrong identifier: the cited DOI/PMID does not exist, but the work itself was found"
     record.evidence = " | ".join(p for p in evidence_parts if p)
     if sources_consulted:
         record.evidence += f" | source={'+'.join(sources_consulted)}"
@@ -985,13 +1436,13 @@ PAGINATION_PLACEHOLDER_RE = re.compile(
 
 def flag_pagination_placeholder(record: RefRecord) -> None:
     """If the raw entry carries a pagination/publication-stage placeholder, attach a
-    note and downgrade a would-be VERIFIED record to UNVERIFIED (an in-press/e000
+    note and downgrade a resolved (OK) record to UNVERIFIED (an in-press/e000
     citation is not yet locatable to the page). Worse statuses are left unchanged."""
     if not PAGINATION_PLACEHOLDER_RE.search(record.raw or ""):
         return
     tag = "pagination_placeholder"
     record.note = f"{record.note} | {tag}".strip(" |") if record.note else tag
-    if record.status == "VERIFIED":
+    if record.status == "OK":
         record.status = "UNVERIFIED"
         ev = "identifier resolved but pagination/publication-stage placeholder unresolved"
         record.evidence = f"{record.evidence} | {ev}".strip(" |") if record.evidence else ev
@@ -1037,16 +1488,28 @@ def write_outputs(records: list[RefRecord], project_root: Path, source: Path,
     actual_authors[], and author counts; schema_version bumps to 4. MISMATCH now
     fires on any #2..#N family hallucination or author-count mismatch, not just the
     first author. A correct lead author does not verify the remaining author list.
+
+    The audit also records WHAT it audited: `source_sha256` (the input file's hash) and
+    `audited_ref_ids`. Without them a green `submission_safe` outlives the file it
+    describes — the bib gains a reference, nobody reruns the audit, and the new entry is
+    shipped never having been checked. A consumer reading the audit later compares both
+    against the current bib (see check_claim_fidelity.py --reference-audit).
     """
     qc_dir = project_root / "qc"
     qc_dir.mkdir(parents=True, exist_ok=True)
 
+    try:
+        source_sha256 = hashlib.sha256(source.read_bytes()).hexdigest()
+    except OSError:
+        source_sha256 = ""
     counts: dict[str, int] = {}
     for rec in records:
         counts[rec.status] = counts.get(rec.status, 0) + 1
     audit = {
         "schema_version": 4,
         "source": portable_source(source, project_root),
+        "source_sha256": source_sha256,
+        "audited_ref_ids": [rec.ref_id.strip() for rec in records],
         "total_references": len(records),
         "counts": counts,
         "duplicate_findings": duplicate_findings,
@@ -1071,7 +1534,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Verify manuscript references.")
     parser.add_argument("input", help="Input .md, .docx, .bib, .txt, or .tsv file")
     parser.add_argument("--project-root", default=".", help="Project root for output artifacts")
-    parser.add_argument("--offline", action="store_true", help="Do not call PubMed/CrossRef/OpenAlex APIs")
+    parser.add_argument("--offline", action="store_true", help="Do not call PubMed/CrossRef/doi.org/OpenAlex APIs")
     parser.add_argument("--no-openalex", action="store_true",
                         help="Disable the OpenAlex tertiary index (restrict to PubMed + CrossRef)")
     parser.add_argument("--timeout", type=int, default=10, help="HTTP timeout seconds")

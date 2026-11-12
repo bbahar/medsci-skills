@@ -1,16 +1,8 @@
 ---
 name: mllm-eval
-description: >
-  Design or audit a model-agnostic evaluation harness for an LLM or multimodal LLM on a clinical task
-  (radiology report generation, visual question answering, clinical text extraction/classification) —
-  the adjudicated reference standard, clinical-efficacy metrics (RadGraph-F1 / CheXbert-F1 beyond
-  BLEU/ROUGE), faithfulness and hallucination, pretraining-contamination of public benchmarks,
-  prompt-sensitivity and determinism, answer-matching, and a reader study — and gate the plan for those
-  axes. Works on a closed API or open weights. Never fabricates outputs or scores, and never reports
-  n-gram overlap as clinical correctness.
-triggers: MLLM evaluation, LLM evaluation, multimodal LLM, report generation, radiology report generation, visual question answering, VQA, RadGraph, CheXbert, faithfulness, hallucination, prompt sensitivity, contamination, GPT, LLaVA-Med, clinical LLM, medical VLM, reader study for reports
-tools: Read, Write, Edit, Bash, Grep, Glob
-model: inherit
+description: Use when designing or auditing how an LLM or multimodal LLM is evaluated on a clinical task (report generation, VQA, text extraction). Covers reference standard, clinical-efficacy metrics beyond BLEU/ROUGE, hallucination, contamination and prompt sensitivity. Imaging models are /model-assessment.
+metadata:
+  triggers: "MLLM evaluation, LLM evaluation, multimodal LLM, report generation, radiology report generation, visual question answering, VQA, RadGraph, CheXbert, faithfulness, hallucination, prompt sensitivity, contamination, GPT, LLaVA-Med, clinical LLM, medical VLM, reader study for reports"
 ---
 
 # MLLM-Eval Skill
@@ -26,8 +18,8 @@ clinical-efficacy metrics (RadGraph-F1 / CheXbert-F1 via their published extract
 the model or computing the metrics itself.
 
 It is the LLM/MLLM **evaluation-design counterpart** in the lane — an auditor that hands the specified
-metrics to their extractors and `/analyze-stats`, parallel to how `/model-validation` audits an imaging
-model's design (the imaging metrics themselves are computed by `/model-evaluation`). The reviewer-side
+metrics to their extractors and `/analyze-stats`, parallel to how `/model-assessment` audits an imaging
+model's design and computes its metrics. The reviewer-side
 audit of a finished manuscript uses the `mllm_evaluation.md` (ME0–ME8) probe via `/self-review` and
 `/peer-review`; this skill is the author-side harness design. It routes the reader study to
 `/design-ai-benchmarking`, the sizing to `/calc-sample-size`, and TRIPOD-LLM / MI-CLEAR-LLM compliance to
@@ -40,7 +32,7 @@ audit of a finished manuscript uses the `mllm_evaluation.md` (ME0–ME8) probe v
 
 ## When NOT to use
 - AI-vs-human-expert benchmark with a rated rubric → `/design-ai-benchmarking`.
-- Imaging prediction/segmentation model → `/model-evaluation` + `/model-validation`.
+- Imaging prediction/segmentation model → `/model-assessment`.
 - Image-to-image generative model → the `image_synthesis` probe.
 - Training / serving the LLM → out of scope.
 - Item-level TRIPOD-LLM / MI-CLEAR-LLM audit of a finished manuscript → `/check-reporting`.
@@ -56,8 +48,10 @@ outputs are scored against.
 Require an **adjudicated expert reference** (not a single unverified report or a model-derived label).
 For report generation, report a **clinical-efficacy metric** — **RadGraph-F1** (Jain et al., NeurIPS
 2021) or **CheXbert-F1** (Smit et al., 2020), or the composite **RadCliQ** (Yu et al., *Patterns* 2023)
-— **alongside** any BLEU/ROUGE, with CIs. For VQA/classification, report accuracy at the
-real prevalence with a stated answer-matching rule.
+— **alongside** any BLEU/ROUGE, with CIs. For VQA/classification, state the answer-matching rule and
+report **per-class sensitivity/specificity** (or precision/recall/F1) and **PPV at the real
+prevalence**, with CIs; accuracy only alongside them — at 2% prevalence, answering "negative" every
+time scores 98% accuracy.
 
 ### Phase 3 — Faithfulness + contamination (ME3, ME4)
 Add an **atomic-fact faithfulness** measure + a **false-premise / abstention** probe (MedVH, Med-HALT) —
@@ -71,12 +65,19 @@ check. For a deployment/utility claim, design a **blinded reader study** with an
 the rubric/IRR to `/design-ai-benchmarking`, ICC/κ to `/analyze-stats`, sizing to `/calc-sample-size`).
 
 ### Phase 5 — Gate the plan (deterministic)
+Declare the axes in `eval_manifest.json` (copy `${CLAUDE_SKILL_DIR}/templates/eval_manifest.json`;
+fields and allowed values in `references/eval_manifest_schema.md`), then:
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/check_mllm_eval_completeness.py \
-  --plan plan.md --task report_generation|vqa|classification --strict
+  --manifest eval_manifest.json --strict
 ```
+Use `"none"` for an axis not done and `"other:<description>"` for a method not listed; any other
+value exits 2. `--plan plan.md --task report_generation|vqa|classification` still runs the older
+keyword check on prose (see Known limits).
 `NGRAM_ONLY` / `FAITHFULNESS_MISSING` / `REFERENCE_STANDARD_MISSING` / `CONTAMINATION_UNADDRESSED` /
-`READER_STUDY_MISSING` must be resolved.
+`READER_STUDY_MISSING` must be resolved. A classification manifest always reports
+`CLASSIFICATION_METRICS_NOT_ASSESSED` (Minor): the manifest has no metric field for it, so check
+per-class sensitivity/specificity and PPV at the real prevalence by eye.
 
 ### Phase 6 — Hand off
 Methods/Results → `/write-paper`; compliance (TRIPOD-LLM / MI-CLEAR-LLM) → `/check-reporting`; reviewer
@@ -96,6 +97,16 @@ audit → `/self-review` (loads ME0–ME8).
 `scripts/check_mllm_eval_completeness.py` — task-aware presence gate on the evaluation plan (stdlib,
 network-free). Reproducible challenge:
 `bash ${CLAUDE_SKILL_DIR}/scripts/mllm_eval_completeness_challenge/verify.sh`.
+
+**Known limits.** Manifest mode checks what is declared, not that the work was done; keep the
+manifest in step with the Methods. It also does not check that a declared metric suits the task:
+report-generation metrics (BLEU, RadGraph F1) declared for a VQA task are accepted without
+comment. Prose mode (`--plan`) checks that a term is present; it does not read negation or sense.
+"No human evaluation was performed" or "hallucination was not assessed" still counts as covering
+that axis, and a word used in another sense still clears it: "green" anywhere clears the clinical-metric check, "unsupported"
+clears faithfulness, "data leakage" from a patient split clears contamination, and "ground truth"
+clears the reference standard whatever it refers to. Read each cleared axis in the plan yourself
+before treating an exit 0 as clean.
 
 ## Boundaries
 

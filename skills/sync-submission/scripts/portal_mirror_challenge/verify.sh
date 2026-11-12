@@ -41,8 +41,8 @@ trap 'rm -rf "$TMP"' EXIT
 pass=0; fail=0
 ck() { if [ "$2" = "$3" ]; then printf '  PASS  %-56s exit=%s\n' "$1" "$3"; pass=$((pass+1));
        else printf '  FAIL  %-56s want=%s got=%s\n' "$1" "$2" "$3"; fail=$((fail+1)); fi; }
-has() { if echo "$2" | grep -q "$3"; then ck "$1" 0 0; else ck "$1" 0 1; fi; }
-hasnt() { if echo "$2" | grep -q "$3"; then ck "$1" 0 1; else ck "$1" 0 0; fi; }
+has() { if grep -q "$3" <<<"$2"; then ck "$1" 0 0; else ck "$1" 0 1; fi; }
+hasnt() { if grep -q "$3" <<<"$2"; then ck "$1" 0 1; else ck "$1" 0 0; fi; }
 run() { python3 "$DET" --manuscript "$FIX/manuscript.md" --profile "$PROFILE" "$@" 2>&1; }
 
 echo "== the journal contract is read from the profile, not guessed =="
@@ -114,7 +114,7 @@ python3 "$DET" --manuscript "$FIX/manuscript.md" --profile "$PROFILE" \
   --portal-dir "$TMP/emitted" --strict >/dev/null 2>&1
 ck "emit -> check round-trips clean" 0 "$?"
 python3 "$DET" --manuscript "$FIX/manuscript.md" --profile "$PROFILE" --emit "$TMP/emitted" 2>&1 \
-  | grep -q "left alone" && ck "--emit will not clobber an edited file" 0 0 \
+  | grep "left alone" >/dev/null && ck "--emit will not clobber an edited file" 0 0 \
   || ck "--emit will not clobber an edited file" 0 1
 
 echo "== the artifact names its own author =="

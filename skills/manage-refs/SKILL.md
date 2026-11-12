@@ -1,84 +1,16 @@
 ---
 name: manage-refs
-description: >
-  Cross-cutting reference manager for medical manuscripts. Single entry point
-  for citation-key validation, journal-CSL pandoc rendering, manuscript ↔ DOCX
-  cross-reference QC, marker conversion (``[N]`` ↔ ``[@key]``), and native
-  Zotero CWYW field-code injection. Replaces the inline reference-handling
-  that previously lived in ``/write-paper`` Phase 7.6 and is reused by
-  ``/revise``, ``/peer-review``, ``/sync-submission``, and any skill that
-  produces a journal submission. Audit-only verification stays in
-  ``/verify-refs`` — this skill writes (renders, injects, converts); that
-  skill only reads.
-triggers: manage-refs, references, citation, citation keys, pandoc citeproc, journal CSL, CSL swap, cascade rejection re-render, cross-reference QC, [@bibkey], Zotero CWYW, ADDIN ZOTERO_ITEM, marker conversion, [N] to [@key], reference manager, render manuscript, check_citation_keys, check_xref
-tools: Read, Write, Edit, Bash, Grep, Glob
-model: inherit
+description: Use when references must be written, rendered or converted. Checks [@key] citation keys, renders the reference list with a journal CSL via pandoc, converts [N] markers, injects Zotero Word field codes and runs manuscript-DOCX cross-reference QC. Read-only auditing is /verify-refs.
+metadata:
+  triggers: "manage-refs, references, citation, citation keys, pandoc citeproc, journal CSL, CSL swap, cascade rejection re-render, cross-reference QC, [@bibkey], Zotero CWYW, ADDIN ZOTERO_ITEM, marker conversion, [N] to [@key], reference manager, render manuscript, check_citation_keys, check_xref"
 ---
 
 # Manage-Refs Skill
 
-> **Canonical source (issue #16).** This SKILL.md is the single canonical
-> reference for the reference-*workflow* (validate keys → render CSL → convert
-> markers → QC cross-references → inject Zotero CWYW). Audit-only bib
-> verification is owned by `skills/verify-refs/SKILL.md`. Any user-scope rule or
-> external note about reference handling should point here (workflow) or to
-> verify-refs (audit) rather than restating the "how", to prevent drift.
-
-You are routing reference-handling work for a medical manuscript. The user is
-somewhere in the lifecycle — drafting, building a circulation DOCX, swapping
-CSL after a journal rejection, fixing a cross-reference defect surfaced by
-QC, or wiring up live Zotero field codes for a co-author Word workflow. Pick
-the right tool from the decision table; do not invent a parallel pipeline.
-
-## Why This Skill Exists
-
-Reference handling spans every late-stage skill: `/write-paper` builds the
-first DOCX, `/revise` rebuilds it after each reviewer round, `/peer-review`
-emits a critique that quotes references back, `/sync-submission` packages the
-final tarball, `/find-journal` informs CSL swaps on rejection cascade, and
-`/verify-refs` audits the bibliography. Until 2026-05-01 these scripts lived
-under `skills/write-paper/scripts/`, which made `/revise` and `/sync-submission`
-silently depend on a sibling skill — a layering inversion that broke when
-`/write-paper` was loaded into a non-research project. Moving the
-lifecycle tools here turns reference handling into a first-class concern
-with one decision tree, one set of CSL files, and one provenance file
-(`NOTICE.md`) for the vendored Zotero CWYW writer.
-
-Validated 2026-05-01 against a 21-reference meta-analysis manuscript
-(a meta-analysis project's submission) for both pandoc-citeproc and Zotero-CWYW paths.
-
-## Anti-Hallucination Guarantees
-
-1. **Citekey discipline (Phase 0)**: every in-text citation must be
-   `[@bibkey]` resolvable in `refs.bib`. `scripts/check_citation_keys.py` is
-   a hard gate — UNDEFINED keys exit non-zero and block the build.
-
-   **`[@NEW:topic]` placeholder convention**: while drafting, `/write-paper`
-   may emit `[@NEW:topic_slug]` markers for citations the author still needs
-   to source. `check_citation_keys.py` classifies these as `NEW_PLACEHOLDER`
-   (not UNDEFINED) and exits 0 — the build is allowed to proceed during
-   drafting. Phase 7.6 (DOCX render) is a hard gate: zero NEW_PLACEHOLDER
-   entries must remain. Resolve each by adding the citation to Zotero (then
-   `/lit-sync` refreshes refs.bib) and replacing the placeholder with the
-   real `[@bibkey]`. Never let a `[@NEW:...]` reach a rendered DOCX.
-2. **No hand-typed References list** — references are always rendered by
-   pandoc citeproc + journal CSL or by the Zotero Word plugin (CWYW). See
-   `~/.claude/rules/manuscript-references.md`.
-3. **Zotero metadata is never invented** — `inject_zotero_cwyw.py` fetches
-   item data live from `http://localhost:23119`. Any HTTP failure aborts
-   with a non-zero exit so partial bibliographies never reach the user.
-4. **Marker conversion is mapping-driven** — `md_marker_convert.py` will
-   never guess a Zotero key for a number; unmapped markers stay as `[N]`
-   and are reported on stderr.
-5. **Cross-reference QC is a submission gate** — `scripts/check_xref.py`
-   `--strict` exits 1 on any `MISSING_DOCX` / `MISSING_BODY` / `MISMATCH`,
-   blocking pipelines that try to ship a DOCX whose Table/Figure citations
-   don't match captions. `--allow-separate-attachments` downgrades the two
-   rows a separate-attachment submission legitimately produces; it never
-   downgrades a `MISSING_BODY` whose float IS in the rendered DOCX.
-6. **Audit boundary**: this skill writes; bibliographic correctness against
-   PubMed/CrossRef stays in `/verify-refs`. Always invoke `/verify-refs`
-   after a render before signing off — one read-only audit, one writer.
+Pick the tool from the Decision Tree; do not invent a parallel pipeline. References are never
+hand-typed: the list is always rendered by pandoc citeproc + journal CSL or by the Zotero Word
+plugin (CWYW). This skill writes (renders, injects, converts); bibliographic correctness against
+PubMed/CrossRef stays in `/verify-refs` — one read-only audit, one writer.
 
 ## Decision Tree
 
@@ -87,8 +19,8 @@ Validated 2026-05-01 against a 21-reference meta-analysis manuscript
 | Validate `[@bibkey]` ↔ `refs.bib` (UNDEFINED / UNUSED keys) | `scripts/check_citation_keys.py` | Hard build gate, runs in seconds |
 | Single-author submission lockdown, frozen output | `scripts/render_pandoc.sh -j <journal>` | Reproducible, CI-friendly |
 | Cascade rejection (e.g., ER → JVIR → CVIR) | `render_pandoc.sh` with new `-j` | CSL swap reformats references in seconds |
-| Verify a journal CSL renders the in-text format / DOI / journal-name style the author guide actually requires | `scripts/check_csl_render.py --csl <x>.csl --bib refs.bib --journal <key>` | A stub/"dependent" CSL inherits its parent's format, which may differ from the guide (parenthetical vs superscript, DOI kept, full journal names). Run BEFORE submission, not after the proof PDF |
-| Reference list prints FULL journal names but the journal wants NLM abbreviations | `scripts/fill_journal_abbrev.py` | Resolves each entry DOI → PMID → PubMed NLM `shortjournal` into the `.bib` so CSL `form="short"` renders abbreviations; authoritative source, never invents abbreviations |
+| Verify a journal CSL renders the in-text format / DOI / journal-name style the author guide actually requires | `scripts/check_csl_render.py --csl <x>.csl --bib refs.bib --journal <key> --md manuscript.md` | A stub/"dependent" CSL inherits its parent's format, which may differ from the guide (parenthetical vs superscript, DOI kept, full journal names). `--md` judges only the keys pandoc reads as cited (`nocite: '@*'` = whole bib); a preprint server named as the journal (`journal = {arXiv}`) is exempt from the abbreviation check; with no `--journal`/`--expect-*` the run is NOT_ASSESSED (exit 2), never PASS. Spec keys and what is not checked: `references/REFERENCE_STYLE_SPECS.md`. Run BEFORE submission, not after the proof PDF |
+| Reference list prints FULL journal names but the journal wants NLM abbreviations | `scripts/fill_journal_abbrev.py --bib refs.bib --out refs_abbrev.bib` | Writes `shortjournal` from PubMed (PMID, else DOI → PMID), then CrossRef `short-container-title`, named per entry (often ISO 4 with periods, not NLM: check those). Inserts after the journal field in the entry's own indentation, never overwrites, re-parses before writing; exit 1 = some lookups failed. In a Better BibTeX-managed bib, fill Zotero's "Journal Abbr" instead |
 | Reviewer revision: add 1–2 refs to a Word doc with co-authors live | Zotero Word plugin (user GUI) | Minimal disruption to track-changes flow |
 | Reviewer revision: bulk reference change | Edit markdown SSOT, re-run `render_pandoc.sh` | Consistency, no cherry-pick risk |
 | Migrate `[N]` numeric markers → `[@key]` for pandoc | `scripts/md_marker_convert.py --to-keys` | Mapping-driven, partial conversion safe |
@@ -96,11 +28,11 @@ Validated 2026-05-01 against a 21-reference meta-analysis manuscript
 | Wire native Zotero CWYW field codes into a .docx (live Refresh in Word) | `scripts/inject_zotero_cwyw.py` | Co-author Word workflow, post-circulation editability |
 | Manuscript ↔ rendered DOCX cross-reference QC | `scripts/check_xref.py --strict` | Submission gate (P0 blocker on mismatch) |
 | Figures/tables submitted as separate attachments (radiology, most medical journals) | `check_xref.py --strict --allow-separate-attachments` | Downgrades `MISSING_DOCX` to WARN; `MISSING_BODY`/`MISMATCH` remain P0 |
-| **v_(N+1) docx build-time regeneration check** | `check_xref.py --vN-docx-md5 <prev>.docx [--vN-md <prev>.md]` | Defense-in-depth: identity = unmodified seed copy; missing diff lines = body not regenerated |
-| **Duplicate bibliography in the built artifact** | `scripts/check_reference_duplication.py --docx <built>.docx` (or `--text <rendered>.md`) | Fires when the reference list is duplicated — `DUP_REF_HEADING` / `REF_NUMBER_RESTART` / `REF_SIGNATURE_DUP` (Major). Catches the hybrid hand-typed `## References` list + pandoc `--citeproc` auto-bibliography, which renders **two** lists (the second often after the legends). Run after any citeproc build |
-| **Publisher markup in a `.bib` title** (renders as garbage) | `scripts/check_bib_title_markup.py --bib refs.bib --strict` | CrossRef ships `<scp>WHO</scp>` / `<i>IDH</i>` in titles and a DOI-add stores them verbatim; BBT then escapes them (`{$<$}scp{$>$}`) or strips them without restoring the space (`andTERTPromoter`, `1p/19q,IDH`). `verify_refs` proves the reference is *true*; this proves it will *print*. `TITLE_MARKUP` / `TITLE_FUSION` (Major) |
+| **v_(N+1) docx build-time regeneration check** | `check_xref.py --vN-docx-md5 <prev>.docx [--vN-md <prev>.md]` | Identity = unmodified seed copy; missing diff lines = body not regenerated |
+| **Duplicate bibliography in the built artifact** | `scripts/check_reference_duplication.py --docx <built>.docx` (or `--text <rendered>.md`) | `DUP_REF_HEADING` / `REF_NUMBER_RESTART` / `REF_SIGNATURE_DUP` (Major). Catches a hand-typed `## References` list plus the pandoc `--citeproc` auto-bibliography, which renders **two** lists (the second often after the legends). Run after any citeproc build |
+| **Publisher markup in a `.bib` title** (renders as garbage) | `scripts/check_bib_title_markup.py --bib refs.bib --strict` | CrossRef titles carry `<scp>WHO</scp>` / `<i>IDH</i>`; BBT escapes them (`{$<$}scp{$>$}`) or strips them without restoring the space (`andTERTPromoter`). `verify_refs` proves the reference is *true*; this proves it will *print*. `TITLE_MARKUP` / `TITLE_FUSION` (Major) |
 | **Master pre-submission gate** (recommended before any submission) | `scripts/pre_submission_gate.sh` | Chains `check_citation_keys` → `check_bib_title_markup` → `verify_refs --strict` → `render_pandoc` (optional) → `check_xref --strict`; single artifact `qc/pre_submission_gate.json` |
-| Direct render with a built-in reference audit | `scripts/render_pandoc.sh` (audits the `.bib` via `/verify-refs` first; blocks on FABRICATED/MISMATCH/duplicates) | Defense-in-depth so even a direct render call cannot ship hallucinated citations; best-effort (skips with a warning if `/verify-refs` is not alongside), opt out with `-S`. The master gate passes `-S` since it audits in stage 2 |
+| Direct render with a built-in reference audit | `scripts/render_pandoc.sh` (audits the `.bib` via `/verify-refs` first; blocks on FABRICATED/MISMATCH/duplicates; reports UNVERIFIED rows as not clean, without blocking; after the render, warns about cited journal entries without `shortjournal`, which the style prints in full) | Best-effort (skips with a warning if `/verify-refs` is not alongside); opt out with `-S`. The master gate passes `-S` because it runs `verify_refs` in its stage 3 |
 | Bibliographic audit against PubMed / CrossRef | **delegate** to `/verify-refs` | Audit-only — keep writer/auditor separation |
 
 ## Workflows
@@ -108,8 +40,11 @@ Validated 2026-05-01 against a 21-reference meta-analysis manuscript
 ### A. Pandoc citeproc (default for solo authors and final submissions)
 
 User provides `manuscript.md` with `[@bibkey]` citations + `refs.bib`.
-1. **Gate**: `python "${CLAUDE_SKILL_DIR}/scripts/check_citation_keys.py" manuscript.md refs.bib`
-   — exits non-zero on UNDEFINED keys. Fix and re-run.
+1. **Gate**: `python3 "${CLAUDE_SKILL_DIR}/scripts/check_citation_keys.py" manuscript.md refs.bib`
+   — exits non-zero on UNDEFINED keys. Fix and re-run. A `[@NEW:topic_slug]` drafting
+   placeholder from `/write-paper` is reported as UNDEFINED too: resolve each by adding the
+   citation to Zotero (`/lit-sync` then refreshes `refs.bib`) and replacing the placeholder with
+   the real `[@bibkey]`. Never let a `[@NEW:...]` reach a rendered DOCX.
 2. **Render**:
    ```bash
    "${CLAUDE_SKILL_DIR}/scripts/render_pandoc.sh" \
@@ -123,6 +58,8 @@ User provides `manuscript.md` with `[@bibkey]` citations + `refs.bib`.
    what is on disk when `-j` names a style it cannot find, so ask the script rather than
    trusting a list written here. Two standing fallbacks: use `radiology` for RYAI and
    `vancouver` for JVIR (neither has a dedicated CSL).
+   A cited key that is not in the `.bib` makes the render exit 5 and name the key: pandoc
+   prints it as `(key?)` in the output and does not fail on its own.
 3. **QC**:
    ```bash
    python3 "${CLAUDE_SKILL_DIR}/scripts/check_xref.py" \
@@ -145,9 +82,11 @@ a `[N] → ZoteroKey` mapping.
      --input manuscript.md --output manuscript_keys.md \
      --map ref_map.json --to-keys
    ```
-   Optionally stage with `--active-ns 1,2,3,4,19` for a sample build first
-   (validated on an active meta-analysis project: 5-ref sample reduces Word Refresh blast radius
-   when debugging).
+   The conversion never guesses a Zotero key for a number: unmapped markers stay as `[N]`, are
+   reported on stderr, and make the script exit 1 (the partial output is still written; pass
+   `--allow-partial` to accept it). Ranges such as `[1-3]` are expanded. Any bracketed
+   number counts as a marker, so a year in brackets (`[2019-2021]`) is reported UNMAPPED too. Optionally stage with `--active-ns 1,2,3,4,19` for a sample build
+   first (a 5-reference sample limits the Word Refresh blast radius while debugging).
 2. **Render to .docx** with pandoc (workflow A) so the body has plain text
    `[@key]` markers, OR pre-build a .docx some other way that still contains
    plain `[@key]` text.
@@ -155,14 +94,15 @@ a `[N] → ZoteroKey` mapping.
    ```bash
    python3 "${CLAUDE_SKILL_DIR}/scripts/inject_zotero_cwyw.py" \
      --input manuscript_keys.docx --output manuscript_cwyw.docx \
-     --user-id 16613550 --keys-from keys.txt
+     --user-id <zotero-user-id> --keys-from keys.txt
    ```
-   The script fetches Zotero metadata via the local connector (port 23119);
-   any HTTP failure aborts with non-zero exit.
-4. **First-build instruction** (REQUIRED — see Known Limitation #1): open
-   the output in Word → Zotero tab → **Add/Edit Bibliography** once. After
-   that, **Refresh** keeps citations and bibliography in sync as authors
-   edit.
+   The script fetches item metadata live from the local Zotero connector (port 23119), so
+   Zotero must be running locally; there is no web-API fallback. Any HTTP failure aborts with a
+   non-zero exit, so a partial bibliography never reaches the user. Never invent Zotero metadata.
+4. **First-build instruction** (REQUIRED): the script writes an empty `ADDIN ZOTERO_BIBL`
+   stub, which Word's Zotero Refresh treats as user-customized and refuses to populate. Open
+   the output in Word → Zotero tab → **Add/Edit Bibliography** once. After that, **Refresh**
+   keeps citations and bibliography in sync as authors edit.
 5. **Surgical patches are unsafe**: for ref additions in later rounds, edit
    the markdown SSOT and rebuild the whole .docx instead of regex-patching
    the post-CWYW file. Zotero's rendered `[N]` superscripts can collide
@@ -188,20 +128,17 @@ User shipped a manuscript and a reviewer flagged a Table/Figure mismatch.
 3. See `references/check_xref_symptoms.md` for the
    `MISSING_BODY` / `MISSING_DOCX` / `MISMATCH` triage table.
 4. For journals that accept figures and tables as **separate attachment files**
-   (the default in European Radiology, Radiology, AJR, JVIR, KJR, and most
-   medical journals), pass `--allow-separate-attachments`. It downgrades two
-   rows, and the run reports them apart because their evidence differs:
+   (European Radiology, Radiology, AJR, JVIR, KJR, and most medical journals), pass
+   `--allow-separate-attachments`. It downgrades two rows, reported apart because their
+   evidence differs:
 
    - `MISSING_DOCX` — a `--docx` was supplied and **proved** the float is not in
      the rendered main document. That is what a separate attachment looks like.
-   - `MISSING_BODY` with **no `--docx` supplied** — nothing was checked. The float
-     is either separately attached, as you declared, or a caption nobody wrote.
-     Excused on your word, printed as `EXCUSED WITHOUT EVIDENCE`, and counted in
-     `summary.downgraded_unchecked`.
+   - `MISSING_BODY` with **no `--docx` supplied** — nothing was checked. Excused on your word,
+     printed as `EXCUSED WITHOUT EVIDENCE`, and counted in `summary.downgraded_unchecked`.
 
    `MISMATCH` stays P0. So does `MISSING_BODY` when the float **is** in the
-   rendered DOCX — that is SSOT drift, and no attachment policy makes the build
-   pipeline an acceptable single source of truth for a caption.
+   rendered DOCX — that is SSOT drift, which no attachment policy excuses.
 
    **Run once with `--docx` before submitting.** The flag is a declaration, not a
    verification; supplying the DOCX is what converts an excuse into evidence.
@@ -212,7 +149,7 @@ When building v_(N+1) from a frozen v_N, the v_(N+1) docx MUST differ
 from v_N docx by content — a byte-identical copy is a silent seed-copy
 that will revert markdown edits at peer review. `check_xref.py` carries
 two flags for the build-time companion to the submission-time gate
-in `scripts/verify_package_integrity.py --assert-vN-docx-changed`:
+in `/sync-submission`'s `scripts/verify_package_integrity.py --assert-vN-docx-changed`:
 
 ```bash
 python3 "${CLAUDE_SKILL_DIR}/scripts/check_xref.py" \
@@ -248,19 +185,20 @@ bash "${CLAUDE_SKILL_DIR}/scripts/pre_submission_gate.sh" \
 
 Stage order (first failure aborts):
 1. `check_citation_keys.py manuscript.md refs.bib` — UNDEFINED / UNUSED keys
-2. `verify_refs.py refs.bib --strict` — PubMed / CrossRef per-entry verification
-3. `render_pandoc.sh -j <csl> -i ... -b ... -o ...` — invoked only when `--docx` is omitted
-4. `check_xref.py --md ... --docx ... --strict [--allow-separate-attachments]`
+2. `check_bib_title_markup.py --strict` — publisher markup / tag-strip fusion in `.bib` titles
+3. `verify_refs.py refs.bib --strict` — PubMed / CrossRef per-entry verification
+4. `render_pandoc.sh -S -j <csl> -i ... -b ... -o ...` — invoked only when `--docx` is omitted
+   (`--journal <csl>`, default `vancouver`)
+5. `check_xref.py --md ... --docx ... --strict [--allow-separate-attachments]`
 
 On success the chain writes `qc/pre_submission_gate.json` (plus the
-per-stage artifacts `qc/reference_audit.json` and `qc/xref_audit.json`)
-with `submission_safe: true`. On any failure the JSON records the failing
+per-stage artifacts `qc/bib_title_markup.json`, `qc/reference_audit.json` and
+`qc/xref_audit.json`) with `submission_safe: true`. On any failure the JSON records the failing
 stage and exit code, and the script exits non-zero — do not submit until
 the failing stage passes.
 
-Critical: the gate does **not** reimplement any check. It calls the existing
-scripts as subprocesses. If you find yourself wanting to add a check, add it
-to the underlying script (the gate then picks it up automatically).
+The gate does **not** reimplement any check; it calls the existing scripts as subprocesses. A
+new check belongs in the underlying script, which the gate then picks up.
 
 ### F. BibTeX author-format corruption (rendered-name check)
 
@@ -280,7 +218,11 @@ This skill defines **three submission gates** and **one user approval gate**:
 - **Gate 1 (citekey integrity)**: `check_citation_keys.py` exits non-zero on
   UNDEFINED keys. The pipeline halts; the user reviews and fixes.
 - **Gate 2 (cross-reference integrity)**: `check_xref.py --strict` exits 1 on
-  any `MISSING_DOCX` / `MISSING_BODY` / `MISMATCH` row. The user reviews
+  any `MISSING_DOCX` / `MISSING_BODY` / `MISMATCH` row (a float the markdown
+  defines but the DOCX lacks is `MISSING_DOCX` even when no in-text citation of
+  it was recognised; a legend inside an HTML comment or fenced code is not
+  rendered, so it stays `UNCITED`). With `--docx` and no `python-docx` it exits 2: the DOCX
+  audit did not run. The user reviews
   `qc/xref_audit.json` and resolves before proceeding. Under
   `--allow-separate-attachments`, check `summary.downgraded_unchecked` as well as
   `submission_safe`: a non-zero count means rows passed without being checked.
@@ -299,39 +241,13 @@ This skill defines **three submission gates** and **one user approval gate**:
 `alisoroushmd/zotero-mcp` @ `ed5dfb71`, MIT licensed. See
 [`NOTICE.md`](./NOTICE.md) and [`LICENSE.zotero-mcp`](./LICENSE.zotero-mcp).
 
-## Related
-
-- `~/.claude/rules/manuscript-references.md` — global rule (decision tree
-  this skill implements)
-- `~/.claude/rules/agent-skill-routing.md` — skill router (this skill is the
-  reference-handling row)
-- `~/.claude/rules/zotero-workflow.md` — BBT auto-export, MCP setup
-- `/verify-refs` — read-only audit (PubMed / CrossRef + first-author
-  cross-check)
-- `/lit-sync` — Zotero ↔ Obsidian sync, `refs.bib` provider
-- `/write-paper` Phase 7.6 — calls this skill (one-line delegation)
-- `/revise`, `/sync-submission`, `/find-journal` — call this skill on
-  rebuild / re-render / cascade
-
 ## Known Limitations
 
-1. **First-build empty BIBL field (CWYW)**: `inject_zotero_cwyw.py` writes a
-   stub `ADDIN ZOTERO_BIBL` field; Word's Zotero Refresh treats an empty
-   stub as user-customized and refuses to populate it. User must run
-   Add/Edit Bibliography once. Subsequent Refresh works as expected.
-   Validated on Word for Mac, an active meta-analysis project.
-2. **Webpage / non-journal item types**: handled by the patched
-   `zotero_to_csl_json` that fetches Zotero's native CSL-JSON; do not bypass
-   this patch.
-3. **Surgical post-build regex patches are unsafe** — see Workflow B step 5.
-4. **Local Zotero required for CWYW** — port 23119 must be reachable; no
-   web-API fallback yet (would need `ZOTERO_API_KEY`). On failure the script
-   aborts with non-zero exit so partial builds never ship.
-
-## Global-rule references
-
-Some passages in this skill cite a path of the form `~/.claude/rules/<name>.md`. Those are the
-maintainer's personal global rules, kept outside this repository. They are **not shipped with
-this skill** and will not exist on your machine; they appear only as provenance for where a
-convention came from. If one of them looks like it is standing in for an instruction you actually
-need, that is a bug — please open an issue, because the instruction belongs here.
+- **Webpage / non-journal item types**: handled by the patched
+  `zotero_to_csl_json` that fetches Zotero's native CSL-JSON; do not bypass
+  this patch.
+- **"Table 1 and 2" (singular kind word, number list)**: `check_xref.py` reads only
+  `Table 1` from it; parsing a bare number after "and" in prose would read "Table 1 and 2
+  patients" as a citation. A float defined in the markdown but absent from the DOCX is still
+  blocked as `MISSING_DOCX`; one that is neither defined nor rendered is not seen. Write
+  "Tables 1 and 2" or "Table 1 and Table 2".
