@@ -34,35 +34,32 @@ The finding it produced was quarantined and not acted on, and the corpus in plac
 so nothing measurable was lost. The next corpus is the one that reading destroys, and this file
 exists because the fence was in a prompt instead of in the repository.
 
-## Merging your own pull requests
+## Merging pull requests
 
-The maintainer has authorized Claude to merge a pull request it opened, **without asking**, when all
-of these hold: CI is green on the current head, there is no merge conflict, no review thread is open,
-and the change is one of:
+This is a fork of `Aperivue/medsci-skills`, maintained by its owner for hematology and
+transfusion-medicine work. **Ask the fork owner before merging any pull request.** A request to
+"open the PR and merge it once checks pass" is that permission for that pull request only. Merge
+only when CI is green on the current head and there is no merge conflict.
 
-- a CI, test or tooling fix (workflows, `scripts/`, `tests/`, challenge-card `verify.sh` plumbing);
-- a correction of a stated count, link or other fact in documentation;
-- bookkeeping (distribution manifest, generated docs and catalogs, CHANGELOG entries);
-- a refactor that changes no output a user sees.
+Use a **merge commit**, not a squash, for a pull request that brings in upstream changes: a squash
+discards the upstream history and makes the next upstream merge conflict with itself.
 
-Squash-merge, then say what was merged. **Ask first** for anything else, and always for:
+Always say so first, and wait, for:
 
 - a change to what a detector flags or clears, or to its message — that is what a user is told about
   their manuscript;
-- a change to a medical or research claim, or to a reporting checklist (`MAINTAINERS.md` requires
-  founder review);
-- a release, a version bump or a tag;
+- a change to a medical or research claim, or to a reporting checklist — the fork owner reviews
+  these as the clinical reader;
+- a release, a version bump or a tag — releases belong to upstream, not to this fork;
 - anything touching `_corpus/`.
-
-When a pull request mixes the two, it is the second kind.
 
 ## Working from a cloud session
 
-A cloud session sees this repository and nothing else. The maintainer's own Claude rules, skills
-and memory are on their machine, and so are their manuscript and project folders. Five of those
-local rules matter here, so they are restated.
+A cloud session sees this repository and nothing else. The fork owner's own Claude rules, skills
+and memory are on their machine, and so are their manuscript and project folders. Five rules
+matter here, so they are stated.
 
-**Talk to the maintainer in Korean.** What lands in the repository stays in English: code,
+**Talk to the fork owner in English.** What lands in the repository is English too: code,
 comments, commit messages and pull-request text (`CONTRIBUTING.md` → *Language Policy*).
 
 **Scan what CI does not.** `validate_skills.sh` scans files. A commit message and a pull-request
@@ -79,9 +76,9 @@ the class ("no manuscript IDs"), not the value.
 
 **Stop and ask before building a new wall.** Before adding a gate, detector, CI check or skill,
 changing direction (positioning, target, distribution channel), or touching three or more gates
-or skills in one batch, stop and brief the maintainer in plain Korean: what it costs, what it could
+or skills in one batch, stop and brief the fork owner in plain English: what it costs, what it could
 hide, and which real failure it answers. Bug fixes, corrections of a typo or a stated fact, and
-mechanical steps of a plan the maintainer already approved go ahead without this.
+mechanical steps of a plan the fork owner already approved go ahead without this.
 
 **Review the final diff blind.** Before a pull request is merged, hand its final diff to a reviewer
 that did not write it: a different model family if one is available, otherwise a fresh agent, and

@@ -48,13 +48,16 @@ long time after the 2025 versions had replaced them.
 
 ### Citation styles (`skills/manage-refs/citation_styles/*.csl`)
 
-29 CSL files from the Citation Style Language project: **CC BY-SA 3.0**, each retaining its own
-`<rights>` element. 23 are unmodified. Six are adapted and stay under CC BY-SA 3.0:
+33 CSL files from the Citation Style Language project: **CC BY-SA 3.0**, each retaining its own
+`<rights>` element. 26 are unmodified. Seven are adapted and stay under CC BY-SA 3.0:
 
 - `vancouver.csl`, `vancouver-superscript.csl`, `nlm-citation-sequence.csl` and
   `american-medical-association.csl` add an empty `<name/>` so that pandoc applies the style's
   name options. The first two are copies of `nlm-citation-sequence` and
   `nlm-citation-sequence-superscript` under another filename.
+- `nlm-citation-sequence-superscript.csl` is a byte-identical copy of `vancouver-superscript.csl`
+  (so it carries the same `<name/>` addition), kept under the upstream filename because
+  `transfusion.csl` resolves its parent by that name.
 - `liver-international.csl` is `nlm-citation-sequence-superscript` with the same `<name/>`
   addition, retitled, listing three authors before et al. instead of six when there are seven or
   more, and without the PMID/PMCID notes.
