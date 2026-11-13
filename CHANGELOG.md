@@ -4,6 +4,10 @@
 
 ### Added
 
+- Citation styles for Blood, TRANSFUSION and Vox Sanguinis in `/manage-refs`, as unmodified
+  copies from the Citation Style Language project with their `<rights>` elements intact. Blood
+  depends on the bundled AMA style; TRANSFUSION's parent ships beside it as
+  `nlm-citation-sequence-superscript.csl`.
 - Journal profiles for Blood, TRANSFUSION and Vox Sanguinis (`/write-paper` and
   `/find-journal`), built from each journal's author-guidelines and masthead text.
   Each records the details that most often trip a submission: Vox Sanguinis counts
