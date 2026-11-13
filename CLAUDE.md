@@ -42,9 +42,11 @@ transfusion-medicine work. **Ask the fork owner before merging any pull request.
 only when CI is green on the current head and there is no merge conflict.
 
 Use a **merge commit**, not a squash, for a pull request that brings in upstream changes: a squash
-discards the upstream history and makes the next upstream merge conflict with itself.
+discards the upstream history and makes the next upstream merge conflict with itself. Any other
+pull request may be merged either way; default to a merge commit.
 
-Always say so first, and wait, for:
+A blanket "merge once checks pass" does not cover the following. Name the item to the fork owner
+and wait for a yes to that item:
 
 - a change to what a detector flags or clears, or to its message — that is what a user is told about
   their manuscript;
